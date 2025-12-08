@@ -67,12 +67,24 @@ std::optional<std::string> LoadSpriteTexture(const std::string& imagePath, std::
 	return {};
 }
 
+struct SpritesheetUv
+{
+	Rectangle Uv{};
+	int32_t NumFrames{ 1 };
+	int32_t WrapAroundAfter{ std::numeric_limits<int32_t>::max() };
+};
+
 std::optional<Texture2D> SpriteTexture{};
 std::string ImagePath{};
 std::optional<std::string> LastError{};
 
 Vector2 pan = { 0, 0 };
 float zoom = 1.0f;
+float gridSize{ 64.f };
+bool drawGrid{ true };
+bool snapToGrid{ true };
+
+std::unordered_map<std::string, SpritesheetUv> SpriteNameToUv{};
 
 
 Rectangle ScreenToImageRect(const Rectangle& r) {
@@ -201,14 +213,22 @@ int main() {
 		BeginDrawing();
 		ClearBackground(DARKGRAY);
 
+		const int32_t CANVAS_WIDTH{ SpriteTexture.has_value() ? SpriteTexture->width : 0 };
+		const int32_t CANVAS_HEIGHT{ SpriteTexture.has_value() ? SpriteTexture->height : 0 };
 
+		const Rectangle canvasRect{ pan.x, pan.y,
+				CANVAS_WIDTH * zoom, CANVAS_HEIGHT * zoom };
+
+
+
+		Vector2 gridMouseCell = { 0 };
+		GuiGrid(canvasRect, "Canvas", gridSize * zoom, 2, &gridMouseCell); // Draw a fancy grid
 
 		// Draw sprite texture
 		if (SpriteTexture.has_value()) {
 			DrawTextureEx(SpriteTexture.value(), pan, 0, zoom, WHITE);
 			// Draw outline
-			DrawRectangleLinesEx(Rectangle{ pan.x, pan.y,
-				SpriteTexture->width * zoom, SpriteTexture->height * zoom }, 1.f, BLACK);
+			DrawRectangleLinesEx(canvasRect, 1.f, BLACK);
 		}
 
 		// Draw canvas origin axis
@@ -288,17 +308,45 @@ int main() {
 			}
 		}
 
-		// Draw error string
+		// Draw grid size slider
+		{
+			std::string gridSizeStr = std::to_string(gridSize);
+			const std::string_view gridStr{};
+			GuiDrawRectangle({ 220, 10, 200, 25 }, 1, LIGHTGRAY, GRAY);
+			GuiDrawText("Grid size:", Rectangle{ 225, 10, 100, 25 }, 16, DARKGRAY);
+			GuiTextBox({ 280, 10, 40, 25 }, const_cast<char*>(gridSizeStr.c_str()), gridSizeStr.size(), true);
+
+
+			// Add plus/minus buttons
+			if (GuiButton({ 220, 10, 25, 25 }, "-"))
+			{
+				gridSize = std::max(0.f, gridSize - 16.f);
+			}
+			if (GuiButton({ 340, 10, 25, 25 }, "+"))
+			{
+				gridSize = std::max(0.f, gridSize + 16.f);
+			}
+
+			GuiCheckBox({ 370, 10, 25, 20 }, "Snap to Grid", &snapToGrid);
+
+		}
+
+		// Draw error string messagebox
 		if (LastError.has_value())
 		{
-			DrawText(LastError->c_str(), 220, 20, 16, RED);
+			//DrawText(LastError->c_str(), 220, 20, 16, RED);
+			const auto result = GuiMessageBox(Rectangle{ 0,0, (float)GetRenderWidth(), (float)GetRenderHeight() }, "Error", LastError->c_str(), "OK");
+			if (result > 0)
+			{
+				LastError.reset();
+			}
 		}
 
 		// Draw filename bottom left window
 		{
-			
-			DrawRectangle(0, GetRenderHeight()-16, GetRenderWidth(), 16, GRAY);
-			DrawText(ImagePath.c_str(), 10, GetRenderHeight()-16, 16, WHITE );
+
+			DrawRectangle(0, GetRenderHeight() - 16, GetRenderWidth(), 16, GRAY);
+			DrawText(ImagePath.c_str(), 10, GetRenderHeight() - 16, 16, WHITE);
 		}
 
 
