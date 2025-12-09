@@ -28,7 +28,7 @@ OpenFilesDialogSynch(std::string& filePath, const std::vector<std::string>& exte
 	extensions.reserve(extension.size());
 	std::transform(extension.begin(), extension.end(), std::back_inserter(extensions), [](const std::string& str) { return str.c_str(); });
 
-	const char const* result{ tinyfd_openFileDialog("Select a file", NULL, extension.size(), extensions.data(), nullptr, 0) };
+	const char* result{ tinyfd_openFileDialog("Select a file", NULL, extension.size(), extensions.data(), nullptr, 0) };
 	if (result)
 	{
 		filePath = std::string(result);
@@ -77,10 +77,11 @@ struct SpritesheetUv
 std::optional<Texture2D> SpriteTexture{};
 std::string ImagePath{};
 std::optional<std::string> LastError{};
+float gridSize{ 64.f };
+std::string GridSizeStr{ std::to_string(gridSize) };
 
 Vector2 pan = { 0, 0 };
 float zoom = 1.0f;
-float gridSize{ 64.f };
 bool drawGrid{ true };
 bool snapToGrid{ true };
 
@@ -140,6 +141,8 @@ int main() {
 	InitWindow(1600, 900, "Sprite Editor (Raylib + Raygui)");
 
 	SetTargetFPS(60);
+
+	GuiSetStyle(DEFAULT, TEXT_SIZE, 18);
 
 	while (!WindowShouldClose()) {
 		// -----------------------------------------------------
@@ -211,7 +214,7 @@ int main() {
 		// Draw
 		// -----------------------------------------------------
 		BeginDrawing();
-		ClearBackground(DARKGRAY);
+		ClearBackground(GRAY);
 
 		const int32_t CANVAS_WIDTH{ SpriteTexture.has_value() ? SpriteTexture->width : 0 };
 		const int32_t CANVAS_HEIGHT{ SpriteTexture.has_value() ? SpriteTexture->height : 0 };
@@ -287,6 +290,8 @@ int main() {
 		//	}
 		//}
 #pragma region GUI
+		DrawRectangle(0, 0, GetRenderWidth(), 50, DARKGRAY);
+
 		// Open sprite button
 		if (GuiButton({ 10, 10, 200, 30 }, "Open sprite")) {
 			std::string newImagePath{};
@@ -308,26 +313,39 @@ int main() {
 			}
 		}
 
-		// Draw grid size slider
+		// Draw grid size
 		{
-			std::string gridSizeStr = std::to_string(gridSize);
-			const std::string_view gridStr{};
-			GuiDrawRectangle({ 220, 10, 200, 25 }, 1, LIGHTGRAY, GRAY);
-			GuiDrawText("Grid size:", Rectangle{ 225, 10, 100, 25 }, 16, DARKGRAY);
-			GuiTextBox({ 280, 10, 40, 25 }, const_cast<char*>(gridSizeStr.c_str()), gridSizeStr.size(), true);
+			GuiDrawRectangle({ 220, 10, 200, 30 }, 1, GRAY, LIGHTGRAY);
+			GuiDrawText("Grid size:", Rectangle{ 215, 10, 100, 30 }, 1, DARKGRAY);
+			if (GuiTextBox({ 310, 10, 100, 30 }, const_cast<char*>(GridSizeStr.c_str()), GridSizeStr.size(), true))
+			{
+				// Check that there are only numbers
+				const bool numericOnly{ std::all_of(GridSizeStr.begin(), GridSizeStr.end(),[](const char c) {return static_cast<bool>(std::isdigit(c)) || c == '.' || c == ',' || c == '\0'; }) };
+				if (numericOnly && GridSizeStr.size())
+				{
+					gridSize = std::max(0.f, std::stof(GridSizeStr));
+				}
+				// Restore string
+				GridSizeStr = std::to_string(gridSize);
+			}
 
 
 			// Add plus/minus buttons
-			if (GuiButton({ 220, 10, 25, 25 }, "-"))
+			if (GuiButton({ 410, 10, 30, 15 }, "+"))
 			{
-				gridSize = std::max(0.f, gridSize - 16.f);
+				gridSize = std::max(0.f, gridSize + 1.f);
+				GridSizeStr = std::to_string(gridSize);
 			}
-			if (GuiButton({ 340, 10, 25, 25 }, "+"))
+			if (GuiButton({ 410, 25, 30, 15 }, "-"))
 			{
-				gridSize = std::max(0.f, gridSize + 16.f);
+				gridSize = std::max(0.f, gridSize - 1.f);
+				GridSizeStr = std::to_string(gridSize);
 			}
-
-			GuiCheckBox({ 370, 10, 25, 20 }, "Snap to Grid", &snapToGrid);
+			// Snap to grid
+			{
+				GuiDrawRectangle({ 450, 10, 150, 30 }, 1, GRAY, LIGHTGRAY);
+				GuiCheckBox({ 460, 15, 20, 20 }, "Snap to Grid", &snapToGrid);
+			}
 
 		}
 
@@ -345,7 +363,7 @@ int main() {
 		// Draw filename bottom left window
 		{
 
-			DrawRectangle(0, GetRenderHeight() - 16, GetRenderWidth(), 16, GRAY);
+			DrawRectangle(0, GetRenderHeight() - 16, GetRenderWidth(), 16, DARKGRAY);
 			DrawText(ImagePath.c_str(), 10, GetRenderHeight() - 16, 16, WHITE);
 		}
 
