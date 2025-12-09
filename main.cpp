@@ -18,6 +18,12 @@
 
 using json = nlohmann::json;
 
+enum class EAnimationType
+{
+	SPRITESHEET,
+	KEYFRAME,
+};
+
 // -------------------------------------------------------------
 // Helpers
 // -------------------------------------------------------------
@@ -67,6 +73,33 @@ std::optional<std::string> LoadSpriteTexture(const std::string& imagePath, std::
 	return {};
 }
 
+
+
+bool NumericBox(Rectangle rect, char* const name, int strSize, bool& increment, bool& decrement)
+{
+	increment = false;
+	decrement = false;
+	// Add plus/minus buttons
+	if (GuiButton({ rect.x + rect.width - 30, rect.y, 30, rect.height / 2.f }, "+"))
+	{
+		increment = true;
+	}
+	if (GuiButton({ rect.x + rect.width - 30, rect.y + rect.height / 2.f, 30, rect.height / 2.f }, "-"))
+	{
+		decrement = true;
+	}
+
+	if (GuiTextBox({rect.x, rect.y,rect.width - 30, rect.height }, name, strSize, true))
+	{
+		// Check that there are only numbers
+		const std::string_view tmp{ name, (size_t)strSize };
+		const bool numericOnly{ std::all_of(tmp.begin(), tmp.end(),[](const char c) {return static_cast<bool>(std::isdigit(c)) || c == '.' || c == ',' || c == '\0'; }) };
+		return (numericOnly && strSize);
+	}
+
+	return increment || decrement;
+}
+
 struct SpritesheetUv
 {
 	Rectangle Uv{};
@@ -84,6 +117,34 @@ Vector2 pan = { 0, 0 };
 float zoom = 1.0f;
 bool drawGrid{ true };
 bool snapToGrid{ true };
+
+
+
+// Selection list
+struct ListSelection
+{
+	int32_t scrollIndex{};
+	int32_t activeIndex{};
+	int32_t focusIndex{};
+	bool ShowList{};
+};
+ListSelection ListState{};
+
+struct Properties
+{
+	bool ShowAnimTypeDropDown{};
+	int32_t GuiAnimTypeIndex{};
+	EAnimationType AnimationType{ EAnimationType::SPRITESHEET };
+	int32_t NumOfFrames{};
+	std::string NumOfFramesStr{ std::to_string(NumOfFrames) };
+	int32_t Columns{};
+	std::string ColumnsStr{ std::to_string(Columns) };
+};
+
+Rectangle panelView = { 0 };
+Vector2 panelScroll = { 0, 0 };
+
+Properties PropertyPanel{};
 
 std::unordered_map<std::string, SpritesheetUv> SpriteNameToUv{};
 
@@ -157,18 +218,21 @@ int main() {
 		// -----------------------------------------------------
 		// Mouse wheel zoom
 		// -----------------------------------------------------
-		float wheel = GetMouseWheelMove();
-		if (wheel != 0) {
-			Vector2 mouse = GetMousePosition();
+		if (!ListState.ShowList)
+		{
+			float wheel = GetMouseWheelMove();
+			if (wheel != 0) {
+				Vector2 mouse = GetMousePosition();
 
-			float prevZoom = zoom;
-			zoom += wheel * 0.1f;
-			if (zoom < 0.1f) zoom = 0.1f;
-			if (zoom > 10.0f) zoom = 10.0f;
+				float prevZoom = zoom;
+				zoom += wheel * 0.1f;
+				if (zoom < 0.1f) zoom = 0.1f;
+				if (zoom > 10.0f) zoom = 10.0f;
 
-			// zoom to cursor
-			pan.x = mouse.x - (mouse.x - pan.x) * (zoom / prevZoom);
-			pan.y = mouse.y - (mouse.y - pan.y) * (zoom / prevZoom);
+				// zoom to cursor
+				pan.x = mouse.x - (mouse.x - pan.x) * (zoom / prevZoom);
+				pan.y = mouse.y - (mouse.y - pan.y) * (zoom / prevZoom);
+			}
 		}
 
 
@@ -315,13 +379,23 @@ int main() {
 
 		// Draw grid size
 		{
-			GuiDrawRectangle({ 220, 10, 200, 30 }, 1, GRAY, LIGHTGRAY);
+
+			GuiDrawRectangle({ 220, 10, 220, 30 }, 1, GRAY, LIGHTGRAY);
 			GuiDrawText("Grid size:", Rectangle{ 215, 10, 100, 30 }, 1, DARKGRAY);
-			if (GuiTextBox({ 310, 10, 100, 30 }, const_cast<char*>(GridSizeStr.c_str()), GridSizeStr.size(), true))
+			bool inc, dec{};
+			if (NumericBox({ 310, 10, 130, 30 }, const_cast<char*>(GridSizeStr.c_str()), GridSizeStr.size(), inc, dec))
 			{
-				// Check that there are only numbers
-				const bool numericOnly{ std::all_of(GridSizeStr.begin(), GridSizeStr.end(),[](const char c) {return static_cast<bool>(std::isdigit(c)) || c == '.' || c == ',' || c == '\0'; }) };
-				if (numericOnly && GridSizeStr.size())
+				if (inc)
+				{
+					gridSize = std::max(0.f, gridSize + 1.f);
+					GridSizeStr = std::to_string(gridSize);
+				}
+				else if (dec)
+				{
+					gridSize = std::max(0.f, gridSize - 1.f);
+					GridSizeStr = std::to_string(gridSize);
+				}
+				else
 				{
 					gridSize = std::max(0.f, std::stof(GridSizeStr));
 				}
@@ -329,25 +403,106 @@ int main() {
 				GridSizeStr = std::to_string(gridSize);
 			}
 
-
-			// Add plus/minus buttons
-			if (GuiButton({ 410, 10, 30, 15 }, "+"))
-			{
-				gridSize = std::max(0.f, gridSize + 1.f);
-				GridSizeStr = std::to_string(gridSize);
-			}
-			if (GuiButton({ 410, 25, 30, 15 }, "-"))
-			{
-				gridSize = std::max(0.f, gridSize - 1.f);
-				GridSizeStr = std::to_string(gridSize);
-			}
 			// Snap to grid
 			{
 				GuiDrawRectangle({ 450, 10, 150, 30 }, 1, GRAY, LIGHTGRAY);
 				GuiCheckBox({ 460, 15, 20, 20 }, "Snap to Grid", &snapToGrid);
 			}
-
 		}
+
+		const char* TEMP_ANIM_NAMES[]{ "Animation0" ,"Animation1" ,"Animation2" ,"Animation3" ,"Animation4" ,"Animation5" ,"Animation6" ,"Animation7" ,"Animation8" ,"Animation9" ,"Animation10" };
+
+		// Animation selection
+		{
+			GuiDrawRectangle({ 610, 10, 310, 30 }, 1, GRAY, LIGHTGRAY);
+
+			if (GuiButton({ 610, 10, 310, 30 }, ListState.activeIndex < 0 ? "No animation" : TEMP_ANIM_NAMES[ListState.activeIndex]))
+			{
+				ListState.ShowList = !ListState.ShowList;
+			}
+
+			if (ListState.ShowList)
+			{
+				const ListSelection prevState{ ListState };
+				GuiScrollPanel({ 620, 40, 330, 300 }, NULL, { 620, 40, 300, 3000 }, &panelScroll, &panelView);
+				BeginScissorMode(panelView.x, panelView.y, panelView.width, panelView.height);
+				GuiListViewEx({ 620 + panelScroll.x, panelScroll.y + 40, 300, 300 }, TEMP_ANIM_NAMES, 10, &ListState.scrollIndex, &ListState.activeIndex, &ListState.focusIndex);
+				EndScissorMode();
+
+				if (ListState.activeIndex != prevState.activeIndex)
+				{
+					ListState.ShowList = false;
+				}
+			}
+		}
+
+		// Property panel
+		{
+			constexpr float RIGHTPANELWIDTH{ 380 };
+			constexpr float RIGHTPANEL_Y{ 50.f };
+			GuiDrawRectangle({ GetRenderWidth() - RIGHTPANELWIDTH, RIGHTPANEL_Y, RIGHTPANELWIDTH, GetRenderHeight() - RIGHTPANEL_Y }, 1, GRAY, DARKGRAY);
+
+			GuiDrawText(ListState.activeIndex < 0 ? "Select an animation" : TEMP_ANIM_NAMES[ListState.activeIndex], { GetRenderWidth() - RIGHTPANELWIDTH, RIGHTPANEL_Y, RIGHTPANELWIDTH, 30 }, TEXT_ALIGN_CENTER, LIGHTGRAY);
+			// Draw properties only if selected
+			if (ListState.activeIndex > -1)
+			{
+				// Animation type selection
+				{
+					if (GuiDropdownBox({ GetRenderWidth() - RIGHTPANELWIDTH, RIGHTPANEL_Y + 30, RIGHTPANELWIDTH, 30 }, "Spritesheet;Keyframe", &PropertyPanel.GuiAnimTypeIndex, PropertyPanel.ShowAnimTypeDropDown))
+					{
+						PropertyPanel.ShowAnimTypeDropDown = !PropertyPanel.ShowAnimTypeDropDown;
+
+						switch (PropertyPanel.GuiAnimTypeIndex)
+						{
+						case 0:PropertyPanel.AnimationType = EAnimationType::SPRITESHEET; break;
+						case 1:PropertyPanel.AnimationType = EAnimationType::KEYFRAME; break;
+						default: break;
+						}
+					}
+				}
+
+				switch (PropertyPanel.AnimationType)
+				{
+				case EAnimationType::SPRITESHEET:
+				{
+					bool inc, dec{};
+					if (NumericBox({ 310, 10, 130, 30 }, const_cast<char*>(PropertyPanel.NumOfFramesStr.c_str()), PropertyPanel.NumOfFramesStr.size(), inc, dec))
+					{
+						if (inc)
+						{
+							PropertyPanel.NumOfFrames = std::max(1, PropertyPanel.NumOfFrames);
+							PropertyPanel.NumOfFramesStr = std::to_string(PropertyPanel.NumOfFrames);
+						}
+						else if (dec)
+						{
+							PropertyPanel.NumOfFrames = std::max(1, PropertyPanel.NumOfFrames-1);
+							PropertyPanel.NumOfFramesStr = std::to_string(PropertyPanel.NumOfFrames);
+						}
+						else
+						{
+							PropertyPanel.NumOfFrames = std::max(0, std::stoi(PropertyPanel.NumOfFramesStr));
+						}
+						// Restore string
+						PropertyPanel.NumOfFramesStr = std::to_string(PropertyPanel.NumOfFrames);
+					}
+				}
+				break;
+
+				case EAnimationType::KEYFRAME: {
+					DrawText("Not Supported yet!", GetRenderWidth() - RIGHTPANELWIDTH, RIGHTPANEL_Y + 60, GuiGetStyle(DEFAULT, TEXT_SIZE), BLACK);
+
+				} break;
+
+				default: break;
+				}
+
+
+
+			}
+		}
+
+
+
 
 		// Draw error string messagebox
 		if (LastError.has_value())
