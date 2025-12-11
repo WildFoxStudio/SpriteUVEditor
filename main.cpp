@@ -24,6 +24,13 @@ enum class EAnimationType
 	KEYFRAME,
 };
 
+enum class EModalType
+{
+	NONE,
+	CREATE_ANIMATION,
+	CONFIRM_DELETE,
+};
+
 // -------------------------------------------------------------
 // Helpers
 // -------------------------------------------------------------
@@ -73,31 +80,57 @@ std::optional<std::string> LoadSpriteTexture(const std::string& imagePath, std::
 	return {};
 }
 
-
-
-bool NumericBox(Rectangle rect, char* const name, int strSize, bool& increment, bool& decrement)
+float ZoomFitIntoRect(int texWidth, int texHeight, Rectangle targetRect)
 {
-	increment = false;
-	decrement = false;
+	const float scaleX{ targetRect.width / static_cast<float>(texWidth) };
+	const float scaleY{ targetRect.height / static_cast<float>(texHeight) };
+	return std::min(scaleX, scaleY);
+}
+
+
+bool NumericBox(Rectangle rect, char* const name, int* value, int min, int max, bool& active, int step = 1)
+{
+	GuiDrawRectangle(rect, 1, GRAY, LIGHTGRAY);
+
+	const auto textW{ GetTextWidth(name) };
+	rect.x += textW;
+	rect.width -= textW;
+
 	// Add plus/minus buttons
 	if (GuiButton({ rect.x + rect.width - 30, rect.y, 30, rect.height / 2.f }, "+"))
 	{
-		increment = true;
+		*value = std::min(*value + step, max);
+		return true;
 	}
 	if (GuiButton({ rect.x + rect.width - 30, rect.y + rect.height / 2.f, 30, rect.height / 2.f }, "-"))
 	{
-		decrement = true;
+		*value = std::max(*value - step, min);
+		return true;
 	}
-
-	if (GuiTextBox({rect.x, rect.y,rect.width - 30, rect.height }, name, strSize, true))
+	if (GuiValueBox({ rect.x, rect.y,rect.width - 30, rect.height }, name, value, std::min(min, max), std::max(min, max), active))
 	{
-		// Check that there are only numbers
-		const std::string_view tmp{ name, (size_t)strSize };
-		const bool numericOnly{ std::all_of(tmp.begin(), tmp.end(),[](const char c) {return static_cast<bool>(std::isdigit(c)) || c == '.' || c == ',' || c == '\0'; }) };
-		return (numericOnly && strSize);
+		active = !active;
+		return true;
 	}
 
-	return increment || decrement;
+	return false;
+}
+
+bool StringBox(Rectangle rect, char* const name, int strSize, bool& active)
+{
+	if (GuiTextBox({ rect.x, rect.y,rect.width, rect.height }, name, strSize, active))
+	{
+		active = !active;
+		return true;
+	}
+
+	return false;
+}
+
+void TextRect(Rectangle rect, const char* const str)
+{
+	GuiDrawRectangle(rect, 1, GRAY, LIGHTGRAY);
+	GuiDrawText(str, { rect.x + 10, rect.y + rect.height * .5f, (float)GetTextWidth(str) ,0.f }, 1, DARKGRAY);
 }
 
 struct SpritesheetUv
@@ -107,18 +140,20 @@ struct SpritesheetUv
 	int32_t WrapAroundAfter{ std::numeric_limits<int32_t>::max() };
 };
 
+constexpr float PAD{ 10.f };
+
+EModalType ActiveModal{ EModalType::NONE };
 std::optional<Texture2D> SpriteTexture{};
 std::string ImagePath{};
 std::optional<std::string> LastError{};
-float gridSize{ 64.f };
-std::string GridSizeStr{ std::to_string(gridSize) };
+int gridSize{ 64 };
+bool gridSizeInputActive{};
 
 Vector2 pan = { 0, 0 };
+float fitZoom = 1.0f;
 float zoom = 1.0f;
 bool drawGrid{ true };
 bool snapToGrid{ true };
-
-
 
 // Selection list
 struct ListSelection
@@ -128,6 +163,7 @@ struct ListSelection
 	int32_t focusIndex{};
 	bool ShowList{};
 };
+
 ListSelection ListState{};
 
 struct Properties
@@ -135,10 +171,10 @@ struct Properties
 	bool ShowAnimTypeDropDown{};
 	int32_t GuiAnimTypeIndex{};
 	EAnimationType AnimationType{ EAnimationType::SPRITESHEET };
-	int32_t NumOfFrames{};
-	std::string NumOfFramesStr{ std::to_string(NumOfFrames) };
-	int32_t Columns{};
-	std::string ColumnsStr{ std::to_string(Columns) };
+	int32_t NumOfFrames{ 1 };
+	bool NumOfFramesTextBoxActive{};
+	int32_t Columns{ 16 };
+	bool ColumnsTextBoxActive{};
 };
 
 Rectangle panelView = { 0 };
@@ -146,7 +182,21 @@ Vector2 panelScroll = { 0, 0 };
 
 Properties PropertyPanel{};
 
-std::unordered_map<std::string, SpritesheetUv> SpriteNameToUv{};
+using ANIMATION_NAME_T = char[32 + 1];
+ANIMATION_NAME_T NewAnimationName{ "Animation_0" };
+bool NewAnimationEditMode{ false };
+std::unordered_map<std::string, SpritesheetUv> AnimationNameToSpritesheet{};
+std::vector<const char*> ImmutableTransientAnimationNames{};
+
+void RebuildAnimationNamesVector()
+{
+	ImmutableTransientAnimationNames.clear();
+	ImmutableTransientAnimationNames.reserve(AnimationNameToSpritesheet.size());
+	for (const auto& [name, spriteSheet] : AnimationNameToSpritesheet)
+	{
+		ImmutableTransientAnimationNames.push_back(name.data());
+	}
+}
 
 
 Rectangle ScreenToImageRect(const Rectangle& r) {
@@ -184,7 +234,7 @@ void ExportMetadata(const std::string& imagePath) {
 	//            {"h", f.uv.height}
 	//        });
 	//    }
-	//    root[s.name] = arr;
+	//    root[s.animationNameOrPlaceholder] = arr;
 	//}
 
 	//// produce <image>.json
@@ -192,10 +242,6 @@ void ExportMetadata(const std::string& imagePath) {
 	//std::ofstream of(out);
 	//of << root.dump(4);
 }
-
-// -------------------------------------------------------------
-// Main
-// -------------------------------------------------------------
 
 int main() {
 	SetConfigFlags(FLAG_WINDOW_MAXIMIZED | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
@@ -225,9 +271,10 @@ int main() {
 				Vector2 mouse = GetMousePosition();
 
 				float prevZoom = zoom;
-				zoom += wheel * 0.1f;
-				if (zoom < 0.1f) zoom = 0.1f;
-				if (zoom > 10.0f) zoom = 10.0f;
+				// Adjust zoom expotentially -> \frac{x^{2}}{m}\cdot\frac{n}{m}
+				zoom += std::copysignf((std::pow(wheel * .6f, 2.f) / fitZoom) * (zoom / fitZoom), wheel);
+				if (zoom < fitZoom / 2) zoom = fitZoom / 2;
+				if (zoom > fitZoom * 10) zoom = fitZoom * 10;
 
 				// zoom to cursor
 				pan.x = mouse.x - (mouse.x - pan.x) * (zoom / prevZoom);
@@ -322,16 +369,16 @@ int main() {
 		//// GUI panel
 		//GuiPanel({ 10, 10, 320, 380 }, "Sprites");
 
-		//// sprite name field
+		//// sprite animationNameOrPlaceholder field
 		//GuiTextBox({ 20, 50, 200, 25 }, spriteNameBuf, 64, true);
 
 		//if (GuiButton({ 230, 50, 80, 25 }, "Rename") && selectedSprite >= 0) {
-		//	sprites[selectedSprite].name = spriteNameBuf;
+		//	sprites[selectedSprite].animationNameOrPlaceholder = spriteNameBuf;
 		//}
 
 		//// Sprite list
 		//for (int i = 0; i < sprites.size(); i++) {
-		//	if (GuiButton({ 20, 90.0f + i * 30.0f, 200, 25 }, sprites[i].name.c_str())) {
+		//	if (GuiButton({ 20, 90.0f + i * 30.0f, 200, 25 }, sprites[i].animationNameOrPlaceholder.c_str())) {
 		//		selectedSprite = i;
 		//		selectedFrame = 0;
 		//	}
@@ -341,7 +388,7 @@ int main() {
 		//if (selectedSprite >= 0) {
 		//	Sprite& s = sprites[selectedSprite];
 
-		//	GuiLabel({ 350, 10, 200, 20 }, ("Frames: " + s.name).c_str());
+		//	GuiLabel({ 350, 10, 200, 20 }, ("Frames: " + s.animationNameOrPlaceholder).c_str());
 		//	for (int j = 0; j < s.frames.size(); j++) {
 		//		if (GuiButton({ 350, 40.0f + j * 30.0f, 150, 25 }, ("Frame " + std::to_string(j)).c_str())) {
 		//			selectedFrame = j;
@@ -354,10 +401,20 @@ int main() {
 		//	}
 		//}
 #pragma region GUI
+		const bool hasValidSelectedAnimation{ ListState.activeIndex > -1 && !ImmutableTransientAnimationNames.empty() && ListState.activeIndex < ImmutableTransientAnimationNames.size() };
+		const char* animationNameOrPlaceholder{ !hasValidSelectedAnimation ? "No animation" : ImmutableTransientAnimationNames[ListState.activeIndex] };
+
 		DrawRectangle(0, 0, GetRenderWidth(), 50, DARKGRAY);
+		float TITLE_X_OFFSET{ PAD };
+
+		if (ActiveModal != EModalType::NONE)
+		{
+			GuiLock();
+		}
 
 		// Open sprite button
-		if (GuiButton({ 10, 10, 200, 30 }, "Open sprite")) {
+		const Rectangle openButtonRect{ TITLE_X_OFFSET, PAD, GetTextWidth("Open sprite") * 1.f + PAD, 30 };
+		if (GuiButton(openButtonRect, "Open sprite")) {
 			std::string newImagePath{};
 			if (OpenFilesDialogSynch(newImagePath, { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tga", "*.dds", "*.ktx", "*.pkm", "*.pvr", "*.astc" })) {
 				std::cout << "Trying to load:" << newImagePath << std::endl;
@@ -370,63 +427,101 @@ int main() {
 
 					// Reset view
 					{
-						pan = { 50, 50 };
-						zoom = 1.0f;
+						pan = { 1, PAD * 2 + 30 };
+						//Set the zoom to fit the image on the max size
+						zoom = ZoomFitIntoRect(SpriteTexture->width, SpriteTexture->height, { 0, 0, GetRenderWidth() - 400.f, GetRenderHeight() - 100.f });
+						fitZoom = zoom;
 					}
 				}
 			}
 		}
+		TITLE_X_OFFSET += openButtonRect.width + PAD;
 
 		// Draw grid size
 		{
+			const Rectangle rect{ TITLE_X_OFFSET, PAD,GetTextWidth("Grid size") + 80.f, 30 };
+			(void)(NumericBox(rect, "Grid size", &gridSize, 0, 8196, gridSizeInputActive));
 
-			GuiDrawRectangle({ 220, 10, 220, 30 }, 1, GRAY, LIGHTGRAY);
-			GuiDrawText("Grid size:", Rectangle{ 215, 10, 100, 30 }, 1, DARKGRAY);
-			bool inc, dec{};
-			if (NumericBox({ 310, 10, 130, 30 }, const_cast<char*>(GridSizeStr.c_str()), GridSizeStr.size(), inc, dec))
-			{
-				if (inc)
-				{
-					gridSize = std::max(0.f, gridSize + 1.f);
-					GridSizeStr = std::to_string(gridSize);
-				}
-				else if (dec)
-				{
-					gridSize = std::max(0.f, gridSize - 1.f);
-					GridSizeStr = std::to_string(gridSize);
-				}
-				else
-				{
-					gridSize = std::max(0.f, std::stof(GridSizeStr));
-				}
-				// Restore string
-				GridSizeStr = std::to_string(gridSize);
-			}
+			TITLE_X_OFFSET += rect.width + PAD;
 
 			// Snap to grid
 			{
-				GuiDrawRectangle({ 450, 10, 150, 30 }, 1, GRAY, LIGHTGRAY);
-				GuiCheckBox({ 460, 15, 20, 20 }, "Snap to Grid", &snapToGrid);
+				GuiDrawRectangle({ TITLE_X_OFFSET, PAD, 80, 30 }, 1, GRAY, LIGHTGRAY);
+				TITLE_X_OFFSET += PAD / 2;
+				GuiCheckBox({ TITLE_X_OFFSET, PAD + 5, 20, 20 }, "Snap", &snapToGrid);
+			}
+			TITLE_X_OFFSET += 80.f;
+		}
+
+		{
+			// Reset zoom to fit
+			const Rectangle fitViewRect{ TITLE_X_OFFSET, PAD, GetTextWidth("Fit view") + PAD, 30 };
+			if (GuiButton(fitViewRect, "Fit view"))
+			{
+				if (SpriteTexture.has_value())
+				{
+					// Reset view
+					{
+						pan = { 1, PAD * 2 + 30 };
+						//Set the zoom to fit the image on the max size
+						zoom = ZoomFitIntoRect(SpriteTexture->width, SpriteTexture->height, { 0, 0, GetRenderWidth() - 400.f, GetRenderHeight() - 100.f });
+					}
+				}
+			}
+			TITLE_X_OFFSET += fitViewRect.width + PAD;
+		}
+
+		{
+			// Create new animation
+
+			const Rectangle newAnimRect{ TITLE_X_OFFSET, PAD, GetTextWidth("Add") + PAD, 30 };
+			if (GuiButton(newAnimRect, "Add"))
+			{
+				ActiveModal = EModalType::CREATE_ANIMATION;
+			}
+			TITLE_X_OFFSET += newAnimRect.width + PAD;
+
+			// Delete animation
+			if (hasValidSelectedAnimation)
+			{
+				const Rectangle delAnimRect{ TITLE_X_OFFSET, PAD, GetTextWidth("Delete") + PAD, 30 };
+				if (GuiButton(delAnimRect, "Delete"))
+				{
+					ActiveModal = EModalType::CONFIRM_DELETE;
+				}
+				TITLE_X_OFFSET += delAnimRect.width + PAD;
 			}
 		}
 
-		const char* TEMP_ANIM_NAMES[]{ "Animation0" ,"Animation1" ,"Animation2" ,"Animation3" ,"Animation4" ,"Animation5" ,"Animation6" ,"Animation7" ,"Animation8" ,"Animation9" ,"Animation10" };
+
 
 		// Animation selection
 		{
-			GuiDrawRectangle({ 610, 10, 310, 30 }, 1, GRAY, LIGHTGRAY);
+			RebuildAnimationNamesVector();
+			const auto nameW{ std::max(150,GetTextWidth(animationNameOrPlaceholder)) * 1.f };
 
-			if (GuiButton({ 610, 10, 310, 30 }, ListState.activeIndex < 0 ? "No animation" : TEMP_ANIM_NAMES[ListState.activeIndex]))
+			const Rectangle animNameRect{ TITLE_X_OFFSET, PAD, nameW, 30 };
+			if (GuiButton(animNameRect, animationNameOrPlaceholder))
 			{
 				ListState.ShowList = !ListState.ShowList;
 			}
+			const auto scrollHeight{ std::clamp(ImmutableTransientAnimationNames.size() * 50.f, 100.f, 500.f) };
+			const auto maxStringW{ std::accumulate(ImmutableTransientAnimationNames.begin(), ImmutableTransientAnimationNames.end(), nameW,
+				[](float acc, const char* name) {
+					return std::max(acc, static_cast<float>(GetTextWidth(name)));
+				}) };
 
 			if (ListState.ShowList)
 			{
 				const ListSelection prevState{ ListState };
-				GuiScrollPanel({ 620, 40, 330, 300 }, NULL, { 620, 40, 300, 3000 }, &panelScroll, &panelView);
+
+				const Rectangle panelScrollRect{ TITLE_X_OFFSET - PAD, PAD + 30, maxStringW + PAD * 2 ,scrollHeight };
+				const Rectangle animListRect{ TITLE_X_OFFSET - PAD, PAD + 30, maxStringW + PAD * 2 ,scrollHeight };
+				GuiScrollPanel(panelScrollRect, NULL, animListRect, &panelScroll, &panelView);
 				BeginScissorMode(panelView.x, panelView.y, panelView.width, panelView.height);
-				GuiListViewEx({ 620 + panelScroll.x, panelScroll.y + 40, 300, 300 }, TEMP_ANIM_NAMES, 10, &ListState.scrollIndex, &ListState.activeIndex, &ListState.focusIndex);
+				GuiListViewEx(animListRect, ImmutableTransientAnimationNames.data(), ImmutableTransientAnimationNames.size(), &ListState.scrollIndex, &ListState.activeIndex, &ListState.focusIndex);
+				// Clamp into range
+				ListState.activeIndex = std::clamp(ListState.activeIndex, -1, static_cast<int32_t>(ImmutableTransientAnimationNames.size()) - 1);
 				EndScissorMode();
 
 				if (ListState.activeIndex != prevState.activeIndex)
@@ -434,62 +529,61 @@ int main() {
 					ListState.ShowList = false;
 				}
 			}
+			TITLE_X_OFFSET += animNameRect.width + PAD;
+
+			// Animation type selection
+			if (hasValidSelectedAnimation)
+			{
+
+				if (GuiDropdownBox({ TITLE_X_OFFSET, PAD, 150, 30 }, "Spritesheet;Keyframe", &PropertyPanel.GuiAnimTypeIndex, PropertyPanel.ShowAnimTypeDropDown))
+				{
+					PropertyPanel.ShowAnimTypeDropDown = !PropertyPanel.ShowAnimTypeDropDown;
+
+					switch (PropertyPanel.GuiAnimTypeIndex)
+					{
+					case 0:PropertyPanel.AnimationType = EAnimationType::SPRITESHEET; break;
+					case 1:PropertyPanel.AnimationType = EAnimationType::KEYFRAME; break;
+					default: break;
+					}
+				}
+				TITLE_X_OFFSET += 150 + PAD;
+
+			}
 		}
 
 		// Property panel
 		{
-			constexpr float RIGHTPANELWIDTH{ 380 };
-			constexpr float RIGHTPANEL_Y{ 50.f };
-			GuiDrawRectangle({ GetRenderWidth() - RIGHTPANELWIDTH, RIGHTPANEL_Y, RIGHTPANELWIDTH, GetRenderHeight() - RIGHTPANEL_Y }, 1, GRAY, DARKGRAY);
+			constexpr float RIGHTPANEL_W{ 380.f };
+			const float RIGHTPANEL_X{ GetRenderWidth() - RIGHTPANEL_W };
+			float RIGHTPANEL_Y{ 50.f };
+			GuiDrawRectangle({ RIGHTPANEL_X, RIGHTPANEL_Y, RIGHTPANEL_W, GetRenderHeight() - RIGHTPANEL_Y }, 1, GRAY, DARKGRAY);
 
-			GuiDrawText(ListState.activeIndex < 0 ? "Select an animation" : TEMP_ANIM_NAMES[ListState.activeIndex], { GetRenderWidth() - RIGHTPANELWIDTH, RIGHTPANEL_Y, RIGHTPANELWIDTH, 30 }, TEXT_ALIGN_CENTER, LIGHTGRAY);
+			GuiDrawText(animationNameOrPlaceholder, { RIGHTPANEL_X, RIGHTPANEL_Y, RIGHTPANEL_W, 30 }, TEXT_ALIGN_CENTER, LIGHTGRAY);
+			RIGHTPANEL_Y += 30 + PAD;
 			// Draw properties only if selected
-			if (ListState.activeIndex > -1)
+			if (hasValidSelectedAnimation)
 			{
-				// Animation type selection
-				{
-					if (GuiDropdownBox({ GetRenderWidth() - RIGHTPANELWIDTH, RIGHTPANEL_Y + 30, RIGHTPANELWIDTH, 30 }, "Spritesheet;Keyframe", &PropertyPanel.GuiAnimTypeIndex, PropertyPanel.ShowAnimTypeDropDown))
-					{
-						PropertyPanel.ShowAnimTypeDropDown = !PropertyPanel.ShowAnimTypeDropDown;
-
-						switch (PropertyPanel.GuiAnimTypeIndex)
-						{
-						case 0:PropertyPanel.AnimationType = EAnimationType::SPRITESHEET; break;
-						case 1:PropertyPanel.AnimationType = EAnimationType::KEYFRAME; break;
-						default: break;
-						}
-					}
-				}
-
 				switch (PropertyPanel.AnimationType)
 				{
 				case EAnimationType::SPRITESHEET:
 				{
-					bool inc, dec{};
-					if (NumericBox({ 310, 10, 130, 30 }, const_cast<char*>(PropertyPanel.NumOfFramesStr.c_str()), PropertyPanel.NumOfFramesStr.size(), inc, dec))
-					{
-						if (inc)
-						{
-							PropertyPanel.NumOfFrames = std::max(1, PropertyPanel.NumOfFrames);
-							PropertyPanel.NumOfFramesStr = std::to_string(PropertyPanel.NumOfFrames);
-						}
-						else if (dec)
-						{
-							PropertyPanel.NumOfFrames = std::max(1, PropertyPanel.NumOfFrames-1);
-							PropertyPanel.NumOfFramesStr = std::to_string(PropertyPanel.NumOfFrames);
-						}
-						else
-						{
-							PropertyPanel.NumOfFrames = std::max(0, std::stoi(PropertyPanel.NumOfFramesStr));
-						}
-						// Restore string
-						PropertyPanel.NumOfFramesStr = std::to_string(PropertyPanel.NumOfFrames);
-					}
+
+					// Num of frames
+					(void)(NumericBox({ RIGHTPANEL_X, RIGHTPANEL_Y, RIGHTPANEL_W, 30 }, "Frames:", &PropertyPanel.NumOfFrames, 1, 8196, PropertyPanel.NumOfFramesTextBoxActive));
+
+					RIGHTPANEL_Y += 30 + PAD;
+
+					// Wrap around
+					(void)(NumericBox({ RIGHTPANEL_X, RIGHTPANEL_Y, RIGHTPANEL_W, 30 }, "Columns:", &PropertyPanel.Columns, 1, 8196, PropertyPanel.ColumnsTextBoxActive));
+
+					RIGHTPANEL_Y += 30 + PAD;
+
 				}
 				break;
 
 				case EAnimationType::KEYFRAME: {
-					DrawText("Not Supported yet!", GetRenderWidth() - RIGHTPANELWIDTH, RIGHTPANEL_Y + 60, GuiGetStyle(DEFAULT, TEXT_SIZE), BLACK);
+					constexpr std::string_view err{ "KEYFRAME not Supported yet!" };
+					DrawText(err.data(), RIGHTPANEL_X + RIGHTPANEL_W / 2.f - GetTextWidth(err.data()) / 2.f, RIGHTPANEL_Y, GuiGetStyle(DEFAULT, TEXT_SIZE), RED);
 
 				} break;
 
@@ -527,6 +621,76 @@ int main() {
 		if (SpriteTexture.has_value() && GuiButton({ 20, 350, 200, 30 }, "Export JSON")) {
 			ExportMetadata("spritesheet.png");
 		}
+
+
+		// Unlock gui
+		GuiUnlock();
+
+		// Modals
+		{
+			Rectangle msgRect{ 0,0,600,300 };
+			// Center the rect to the screen
+			msgRect.x = GetRenderWidth() / 2.f - msgRect.width / 2.f;
+			msgRect.y = GetRenderHeight() / 2.f - msgRect.height / 2.f;
+
+			if (ActiveModal == EModalType::CREATE_ANIMATION)
+			{
+
+
+				if (GuiWindowBox(msgRect, "New animation"))
+				{
+					ActiveModal = EModalType::NONE;
+				}
+
+
+				// Input box for animationNameOrPlaceholder
+				TextRect({ msgRect.x + PAD, msgRect.y + PAD + 30, msgRect.width - PAD * 2, 30 }, "Animation name:");
+				(void)(StringBox({ msgRect.x + PAD, msgRect.y + PAD + 60, msgRect.width - PAD * 2, 30 }, NewAnimationName, sizeof(NewAnimationName), NewAnimationEditMode));
+				bool alreadyExists{ false };
+				if (const auto found{ AnimationNameToSpritesheet.find(NewAnimationName) }; found != AnimationNameToSpritesheet.end())
+				{
+					alreadyExists = true;
+				}
+
+				if (alreadyExists)
+				{
+					DrawText("An animation with this name already exists!", msgRect.x + PAD, msgRect.y + PAD + 100, 16, RED);
+				}
+				else if (!NewAnimationName[0])
+				{
+					DrawText("Must have at least one char!", msgRect.x + PAD, msgRect.y + PAD + 100, 16, RED);
+				}
+				else
+					if (GuiButton({ msgRect.x + PAD, msgRect.y + msgRect.height - 30 - PAD, 100, 30 }, "Create"))
+					{
+						ActiveModal = EModalType::NONE;
+						// Create the animation
+						AnimationNameToSpritesheet.emplace(std::string(NewAnimationName), SpritesheetUv{});
+						PropertyPanel.GuiAnimTypeIndex = AnimationNameToSpritesheet.size() - 1;
+					}
+
+				if (GuiButton({ msgRect.x + PAD + 100 + PAD, msgRect.y + msgRect.height - 30 - PAD, 100, 30 }, "Cancel"))
+				{
+					ActiveModal = EModalType::NONE;
+				}
+			}
+			else if (ActiveModal == EModalType::CONFIRM_DELETE)
+			{
+				assert(!ImmutableTransientAnimationNames.empty());
+				std::string tmp{ "Delete " };
+				tmp += ImmutableTransientAnimationNames[ListState.activeIndex];
+
+				if (GuiMessageBox(msgRect, "Confirm delete", tmp.c_str(), "Cancel;Delete") == 2)
+				{
+					ActiveModal = EModalType::NONE;
+
+					AnimationNameToSpritesheet.erase(ImmutableTransientAnimationNames[ListState.activeIndex]);
+					ListState.activeIndex = -1;
+					RebuildAnimationNamesVector();
+				}
+			}
+		}
+
 
 #pragma endregion
 
