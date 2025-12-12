@@ -15,6 +15,7 @@
 #include <optional>
 #include <limits>
 #include <iostream>
+#include <variant>
 
 using json = nlohmann::json;
 
@@ -31,9 +32,17 @@ enum class EModalType
 	CONFIRM_DELETE,
 };
 
-// -------------------------------------------------------------
-// Helpers
-// -------------------------------------------------------------
+enum EControlIndex : int32_t
+{
+	NONE = 0,
+	TOP = 1 << 1,
+	BOTTOM = 1 << 2,
+	LEFT = 1 << 3,
+	RIGHT = 1 << 4,
+	CENTER = TOP | BOTTOM | LEFT | RIGHT,
+};
+
+#pragma region Helpers
 inline bool
 OpenFilesDialogSynch(std::string& filePath, const std::vector<std::string>& extension)
 {
@@ -133,11 +142,35 @@ void TextRect(Rectangle rect, const char* const str)
 	GuiDrawText(str, { rect.x + 10, rect.y + rect.height * .5f, (float)GetTextWidth(str) ,0.f }, 1, DARKGRAY);
 }
 
+
+template<typename T>
+void RoundTo(T& value, int grid, bool round)
+{
+	if (round)
+		value = std::round(value / grid) * grid;
+}
+#pragma endregion Helpers
+
 struct SpritesheetUv
 {
 	Rectangle Uv{};
 	int32_t NumFrames{ 1 };
 	int32_t WrapAroundAfter{ std::numeric_limits<int32_t>::max() };
+	int32_t FrameDurationMs{ 100 };
+
+	// Internal data
+	int32_t DraggingControlIndex{};
+	Vector2 DeltaMousePos{};
+};
+
+struct KeyframeUv
+{
+	struct Keyframe
+	{
+		Rectangle Uv{};
+		int32_t FrameDurationMs{ 100 };
+	};
+	std::vector<Keyframe> Keyframes{};
 };
 
 constexpr float PAD{ 10.f };
@@ -185,7 +218,7 @@ Properties PropertyPanel{};
 using ANIMATION_NAME_T = char[32 + 1];
 ANIMATION_NAME_T NewAnimationName{ "Animation_0" };
 bool NewAnimationEditMode{ false };
-std::unordered_map<std::string, SpritesheetUv> AnimationNameToSpritesheet{};
+std::unordered_map<std::string, std::variant<SpritesheetUv, KeyframeUv>> AnimationNameToSpritesheet{};
 std::vector<const char*> ImmutableTransientAnimationNames{};
 
 void RebuildAnimationNamesVector()
@@ -219,6 +252,121 @@ Rectangle ImageToScreenRect(const Rectangle& r) {
 		r.width * SpriteTexture->width * zoom,
 		r.height * SpriteTexture->height * zoom
 	};
+}
+
+void DrawDashedLine(Vector2 start, Vector2 end, float dashLength, float gapLength, float thickness, Color color)
+{
+	float dx = end.x - start.x;
+	float dy = end.y - start.y;
+	float length = sqrtf(dx * dx + dy * dy);
+
+	float dirX = dx / length;
+	float dirY = dy / length;
+
+	float drawn = 0.0f;
+	while (drawn < length)
+	{
+		float segment = fminf(dashLength, length - drawn);
+
+		Vector2 a = { start.x + dirX * drawn, start.y + dirY * drawn };
+		Vector2 b = { start.x + dirX * (drawn + segment), start.y + dirY * (drawn + segment) };
+
+		DrawLineEx(a, b, thickness, color);
+
+		drawn += dashLength + gapLength;
+	}
+}
+
+void DrawUVRectDashed(Rectangle rect)
+{
+
+	constexpr Color dashColor{ DARKBLUE };
+	rect.x *= zoom;
+	rect.y *= zoom;
+	rect.x += pan.x;
+	rect.y += pan.y;
+
+	rect.width *= zoom;
+	rect.height *= zoom;
+
+	constexpr float baseThickness{ 1.8f };
+	constexpr float dashLen{ 10 * baseThickness };
+	constexpr float dashGap{ 2 * baseThickness };
+	const auto thickness{ baseThickness * fitZoom };
+
+	//DrawRectangleLinesEx(rect, 1.f, BLACK);
+	DrawDashedLine({ rect.x, rect.y }, { rect.x + rect.width, rect.y }, dashLen, dashGap, thickness, dashColor);
+	DrawDashedLine({ rect.x, rect.y + rect.height }, { rect.x + rect.width, rect.y + rect.height }, dashLen, dashGap, thickness, dashColor);
+
+	DrawDashedLine({ rect.x, rect.y }, { rect.x , rect.y + rect.height }, dashLen, dashGap, thickness, dashColor);
+	DrawDashedLine({ rect.x + rect.width, rect.y }, { rect.x + rect.width , rect.y + rect.height }, dashLen, dashGap, thickness, dashColor);
+}
+
+bool DrawControl(Vector2 origin, float controlExtent, Color baseColor)
+{
+	constexpr Color focusedColor{ BLUE };
+	const Rectangle cRect{ origin.x - controlExtent , origin.y - controlExtent , controlExtent * 2.f , controlExtent * 2.f };
+
+	const bool mouseHover = CheckCollisionPointRec(GetMousePosition(), cRect);
+
+	DrawRectangleRec(cRect, mouseHover ? focusedColor : baseColor);
+
+	return mouseHover;
+}
+
+int32_t DrawUvRectControlsGetControlIndex(Rectangle rect, float controlExtent)
+{
+	constexpr Color controlColor{ DARKBLUE };
+
+	rect.x *= zoom;
+	rect.y *= zoom;
+	rect.x += pan.x;
+	rect.y += pan.y;
+
+	rect.width *= zoom;
+	rect.height *= zoom;
+
+	int32_t index{ EControlIndex::NONE };
+	if (DrawControl({ rect.x + rect.width * .5f, rect.y }, controlExtent, controlColor))
+	{
+		index = { EControlIndex::TOP };
+	}
+	if (DrawControl({ rect.x, rect.y }, controlExtent, controlColor))
+	{
+		index = { EControlIndex::TOP | EControlIndex::LEFT };
+	}
+	if (DrawControl({ rect.x + rect.width, rect.y }, controlExtent, controlColor))
+	{
+		index = { EControlIndex::TOP | EControlIndex::RIGHT };
+	}
+	if (DrawControl({ rect.x + rect.width * .5f, rect.y + rect.height }, controlExtent, controlColor))
+	{
+		index = { EControlIndex::BOTTOM };
+	}
+	if (DrawControl({ rect.x, rect.y + rect.height * .5f }, controlExtent, controlColor))
+	{
+		index = { EControlIndex::LEFT };
+	}
+	if (DrawControl({ rect.x, rect.y + rect.height }, controlExtent, controlColor))
+	{
+		index = { EControlIndex::BOTTOM | EControlIndex::LEFT };
+	}
+	if (DrawControl({ rect.x + rect.width, rect.y + rect.height * .5f }, controlExtent, controlColor))
+	{
+		index = { EControlIndex::RIGHT };
+	}
+	if (DrawControl({ rect.x + rect.width, rect.y + rect.height }, controlExtent, controlColor))
+	{
+		index = { EControlIndex::BOTTOM | EControlIndex::RIGHT };
+	}
+	Color centerColor{ WHITE };
+	centerColor.a = 60;
+	if (DrawControl({ rect.x + rect.width * .5f , rect.y + rect.height * .5f }, controlExtent*2, WHITE))
+	{
+		index = { EControlIndex::CENTER };
+	}
+
+	return index;
 }
 
 void ExportMetadata(const std::string& imagePath) {
@@ -264,13 +412,13 @@ int main() {
 		// -----------------------------------------------------
 		// Mouse wheel zoom
 		// -----------------------------------------------------
+		const float prevZoom = zoom;
 		if (!ListState.ShowList)
 		{
 			float wheel = GetMouseWheelMove();
 			if (wheel != 0) {
 				Vector2 mouse = GetMousePosition();
 
-				float prevZoom = zoom;
 				// Adjust zoom expotentially -> \frac{x^{2}}{m}\cdot\frac{n}{m}
 				zoom += std::copysignf((std::pow(wheel * .6f, 2.f) / fitZoom) * (zoom / fitZoom), wheel);
 				if (zoom < fitZoom / 2) zoom = fitZoom / 2;
@@ -327,6 +475,8 @@ int main() {
 		BeginDrawing();
 		ClearBackground(GRAY);
 
+		const bool hasValidSelectedAnimation{ ListState.activeIndex > -1 && !ImmutableTransientAnimationNames.empty() && ListState.activeIndex < ImmutableTransientAnimationNames.size() };
+
 		const int32_t CANVAS_WIDTH{ SpriteTexture.has_value() ? SpriteTexture->width : 0 };
 		const int32_t CANVAS_HEIGHT{ SpriteTexture.has_value() ? SpriteTexture->height : 0 };
 
@@ -336,7 +486,7 @@ int main() {
 
 
 		Vector2 gridMouseCell = { 0 };
-		GuiGrid(canvasRect, "Canvas", gridSize * zoom, 2, &gridMouseCell); // Draw a fancy grid
+		GuiGrid(canvasRect, "Canvas", (gridSize * zoom), 1, &gridMouseCell); // Draw a fancy grid
 
 		// Draw sprite texture
 		if (SpriteTexture.has_value()) {
@@ -350,6 +500,100 @@ int main() {
 			constexpr float AXIS_LEN{ 640000 };
 			DrawLineEx(Vector2{ pan.x, pan.y }, Vector2{ pan.x + AXIS_LEN, pan.y }, 2.f, RED);
 			DrawLineEx(Vector2{ pan.x, pan.y }, Vector2{ pan.x,pan.y + AXIS_LEN }, 2.f, GREEN);
+		}
+
+		// Draw the selected animation
+		if (hasValidSelectedAnimation)
+		{
+			auto& animationVariant = AnimationNameToSpritesheet.at(ImmutableTransientAnimationNames[ListState.activeIndex]);
+			if (std::holds_alternative<SpritesheetUv>(animationVariant))
+			{
+				auto& spriteSheet = std::get<SpritesheetUv>(animationVariant);
+
+				DrawUVRectDashed(spriteSheet.Uv);
+				//DrawRectangleRec(spriteSheet.Uv, RED);
+				const auto g{ gridSize };
+
+				constexpr float baseControlExtent{ 5.f };
+				const auto controlExtent{ baseControlExtent };
+				const int32_t focusedControlPoints{ DrawUvRectControlsGetControlIndex(spriteSheet.Uv, controlExtent) };
+				if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+				{
+					spriteSheet.DraggingControlIndex = focusedControlPoints;
+				}
+				else
+					if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && spriteSheet.DraggingControlIndex != EControlIndex::NONE)
+					{
+						spriteSheet.DraggingControlIndex = EControlIndex::NONE;
+
+						// Normalize sane rectangle always positive values
+						if (std::signbit(spriteSheet.Uv.width))
+						{
+							spriteSheet.Uv.width *= -1.f;
+							spriteSheet.Uv.x -= spriteSheet.Uv.width;
+						}
+						spriteSheet.Uv.width = std::max(snapToGrid ? g : 1.f, spriteSheet.Uv.width);
+						if (std::signbit(spriteSheet.Uv.height))
+						{
+							spriteSheet.Uv.height *= -1.f;
+							spriteSheet.Uv.y -= spriteSheet.Uv.height;
+						}
+						spriteSheet.Uv.height = std::max(snapToGrid ? g : 1.f, spriteSheet.Uv.height);
+					}
+
+				auto mousePos{ GetMousePosition() };
+				mousePos.x = (mousePos.x * (1.f / zoom)) - pan.x;
+				mousePos.y = (mousePos.y * (1.f / zoom)) - pan.y;
+
+				//DrawRectanglePro({ 0,0,100 * zoom,100 * zoom }, mousePos, 0.f, RED);
+
+				RoundTo(mousePos.x, g, snapToGrid);
+				RoundTo(mousePos.y, g, snapToGrid);
+				//printf("Mousepos %f %f\n", mousePos.x, mousePos.y);
+				//DrawRectangleRec({ mousePos.x, mousePos.y, 10 * zoom, 10 * zoom }, YELLOW);
+				//DrawUVRectDashed({ mousePos.x, mousePos.y, 10, 10 });
+
+				// If zoom has changed
+				if (prevZoom != zoom)
+				{
+					// Reset the delta to avoid unwanted mouse movement
+					spriteSheet.DeltaMousePos = { mousePos };
+				}
+
+				if (spriteSheet.DraggingControlIndex != EControlIndex::NONE)
+				{
+
+					// Handle dragging
+					Vector2 mouseMov{ spriteSheet.DeltaMousePos.x - mousePos.x, spriteSheet.DeltaMousePos.y - mousePos.y };
+
+					if (spriteSheet.DraggingControlIndex & EControlIndex::TOP)
+					{
+						spriteSheet.Uv.y -= mouseMov.y;
+						spriteSheet.Uv.height += mouseMov.y;
+						RoundTo(spriteSheet.Uv.y, g, snapToGrid);
+					}
+					if (spriteSheet.DraggingControlIndex & EControlIndex::BOTTOM)
+					{
+						spriteSheet.Uv.height -= mouseMov.y;
+						RoundTo(spriteSheet.Uv.height, g, snapToGrid);
+					}
+					if (spriteSheet.DraggingControlIndex & EControlIndex::LEFT)
+					{
+						spriteSheet.Uv.x -= mouseMov.x;
+						spriteSheet.Uv.width += mouseMov.x;
+						RoundTo(spriteSheet.Uv.x, g, snapToGrid);
+					}
+					if (spriteSheet.DraggingControlIndex & EControlIndex::RIGHT)
+					{
+						spriteSheet.Uv.width -= mouseMov.x;
+						RoundTo(spriteSheet.Uv.width, g, snapToGrid);
+					}
+
+
+				}
+				// Update mouse delta at the end
+				spriteSheet.DeltaMousePos = mousePos;
+			}
 		}
 
 		// Draw sprite UV previews
@@ -401,7 +645,7 @@ int main() {
 		//	}
 		//}
 #pragma region GUI
-		const bool hasValidSelectedAnimation{ ListState.activeIndex > -1 && !ImmutableTransientAnimationNames.empty() && ListState.activeIndex < ImmutableTransientAnimationNames.size() };
+
 		const char* animationNameOrPlaceholder{ !hasValidSelectedAnimation ? "No animation" : ImmutableTransientAnimationNames[ListState.activeIndex] };
 
 		DrawRectangle(0, 0, GetRenderWidth(), 50, DARKGRAY);
@@ -642,7 +886,6 @@ int main() {
 					ActiveModal = EModalType::NONE;
 				}
 
-
 				// Input box for animationNameOrPlaceholder
 				TextRect({ msgRect.x + PAD, msgRect.y + PAD + 30, msgRect.width - PAD * 2, 30 }, "Animation name:");
 				(void)(StringBox({ msgRect.x + PAD, msgRect.y + PAD + 60, msgRect.width - PAD * 2, 30 }, NewAnimationName, sizeof(NewAnimationName), NewAnimationEditMode));
@@ -665,8 +908,10 @@ int main() {
 					{
 						ActiveModal = EModalType::NONE;
 						// Create the animation
-						AnimationNameToSpritesheet.emplace(std::string(NewAnimationName), SpritesheetUv{});
-						PropertyPanel.GuiAnimTypeIndex = AnimationNameToSpritesheet.size() - 1;
+						SpritesheetUv spriteSheet{};
+						spriteSheet.Uv = { 0,0, (float)gridSize, (float)gridSize };
+						AnimationNameToSpritesheet.emplace(std::string(NewAnimationName), std::move(spriteSheet));
+						ListState.activeIndex = AnimationNameToSpritesheet.size() - 1;
 					}
 
 				if (GuiButton({ msgRect.x + PAD + 100 + PAD, msgRect.y + msgRect.height - 30 - PAD, 100, 30 }, "Cancel"))
