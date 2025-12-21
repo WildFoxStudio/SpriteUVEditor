@@ -32,12 +32,9 @@ SOFTWARE.
 #include "geometry.hpp"
 
 #include "rlgl.h"
+
 #include <nlohmann/json.hpp>
 
-#include "tinyfiledialogs.h"
-
-#include <string>
-#include <vector>
 #include <unordered_map>
 #include <fstream>
 #include <optional>
@@ -74,25 +71,6 @@ enum EControlIndex : int32_t {
 };
 
 #pragma region Helpers
-inline bool OpenFilesDialogSynch(std::string &filePath,
-				 const std::vector<std::string> &extension)
-{
-	std::vector<const char *> extensions;
-	extensions.reserve(extension.size());
-	std::transform(extension.begin(), extension.end(),
-		       std::back_inserter(extensions),
-		       [](const std::string &str) { return str.c_str(); });
-
-	const char *result{ tinyfd_openFileDialog(
-		"Select a file", NULL, extension.size(), extensions.data(),
-		nullptr, 0) };
-	if (result) {
-		filePath = std::string(result);
-		// Tinyfiledialogs not changing the working path to the selected one thus some relative files can not be loaded
-		return true;
-	}
-	return false;
-}
 
 std::optional<std::string>
 LoadSpriteTexture(const std::string &imagePath,
@@ -984,14 +962,14 @@ int main()
 		};
 		if (GuiButton(openButtonRect, "Open sprite")) {
 			std::string newImagePath{};
-			if (OpenFilesDialogSynch(newImagePath,
-						 { "*.png", "*.jpg", "*.jpeg",
-						   "*.bmp", "*.tga", "*.dds",
-						   "*.ktx", "*.pkm", "*.pvr",
-						   "*.astc" })) {
+
+			// Since raylib relies on stb_image for image loading right now the formats supported are:
+			if (app.OpenFileDialog(newImagePath,
+					       { "*.png", "*.jpg", "*.jpeg",
+						 "*.bmp", "*.tga", "*.gif" })) {
 				std::cout << "Trying to load:" << newImagePath
 					  << std::endl;
-				// Load texture is possible
+				// Load texture if possible
 				LastError = LoadSpriteTexture(newImagePath,
 							      SpriteTexture);
 				if (!LastError.has_value()) {

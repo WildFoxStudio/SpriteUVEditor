@@ -25,6 +25,9 @@ SOFTWARE.
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <vector>
+#include <algorithm>
 
 #include "raylib.h"
 
@@ -38,6 +41,9 @@ class App final {
 	{
 		return fontRoboto;
 	}
+
+	bool OpenFileDialog(std::string &filePath,
+			    const std::vector<std::string> &extension) const;
 
     private:
 	Font fontRoboto{};

@@ -24,6 +24,8 @@ SOFTWARE.
 
 #include "app.hpp"
 
+#include "tinyfiledialogs.h"
+
 #include <iostream>
 
 App::App(int32_t width, int32_t height, const char *title)
@@ -53,4 +55,25 @@ App::~App()
 bool App::ShouldRun() const
 {
 	return !WindowShouldClose();
+}
+
+bool App::OpenFileDialog(std::string &filePath,
+			 const std::vector<std::string> &extension) const
+{
+	std::vector<const char *> extensions;
+	extensions.reserve(extension.size());
+	std::transform(extension.begin(), extension.end(),
+		       std::back_inserter(extensions),
+		       [](const std::string &str) { return str.c_str(); });
+
+	const char *result{ tinyfd_openFileDialog(
+		"Select a file", NULL, extension.size(), extensions.data(),
+		nullptr, 0) };
+	if (result) {
+		filePath = std::string(result);
+		// Tinyfiledialogs not changing the working path to the selected one thus some relative files can not be loaded
+		return true;
+	}
+
+	return false;
 }
