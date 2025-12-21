@@ -50,6 +50,8 @@ enum EControlIndex : int32_t {
 
 struct View {
 	float zoom{ 1.f };
+	float prevZoom{ 1.f };
+	float fitZoom{ 1.f };
 	Vec2 pan{};
 
 	Rectangle TransformRect(const Rectangle &rect) const

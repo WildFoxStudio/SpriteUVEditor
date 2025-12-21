@@ -28,6 +28,7 @@ SOFTWARE.
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <optional>
 
 #include "raylib.h"
 
@@ -37,6 +38,8 @@ class App final {
 	bool GridSizeInputActive{}; // Gui box active state
 	bool DrawGrid{ true };
 	bool SnapToGrid{ true };
+	std::string ImagePath{};
+	std::optional<std::string> LastError{};
 
 	App(int32_t width, int32_t height, const char *title);
 	~App();

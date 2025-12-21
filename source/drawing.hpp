@@ -54,7 +54,7 @@ void DrawDashedLine(Vector2 start, Vector2 end, float dashLength,
 	}
 }
 
-void DrawUVRectDashed(Rectangle rect, View view, float fitZoom)
+void DrawUVRectDashed(Rectangle rect, View view)
 {
 	constexpr Color dashColor{ DARKBLUE };
 	rect = view.TransformRect(rect);
@@ -62,7 +62,7 @@ void DrawUVRectDashed(Rectangle rect, View view, float fitZoom)
 	constexpr float baseThickness{ 1.8f };
 	constexpr float dashLen{ 10 * baseThickness };
 	constexpr float dashGap{ 2 * baseThickness };
-	const auto thickness{ baseThickness * fitZoom };
+	const auto thickness{ baseThickness * view.fitZoom };
 
 	//DrawRectangleLinesEx(rect, 1.f, BLACK);
 	DrawDashedLine({ rect.x, rect.y }, { rect.x + rect.width, rect.y },

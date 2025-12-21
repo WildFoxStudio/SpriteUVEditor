@@ -362,16 +362,7 @@ struct KeyframeUv : public Properties {
 };
 
 EModalType ActiveModal{ EModalType::NONE };
-std::string ImagePath{};
-std::optional<std::string> LastError{};
-int32_t gridSize{ 64 };
-bool gridSizeInputActive{};
-
 View view{};
-float fitZoom = 1.0f;
-
-bool drawGrid{ true };
-bool snapToGrid{ true };
 
 // Selection list
 struct ListSelection {
@@ -469,7 +460,7 @@ int main()
 		// -----------------------------------------------------
 		// Mouse wheel zoom
 		// -----------------------------------------------------
-		const float prevZoom = view.zoom;
+		view.prevZoom = view.zoom;
 		if (!ListState.ShowList) {
 			float wheel = GetMouseWheelMove();
 			if (wheel != 0) {
@@ -477,21 +468,22 @@ int main()
 
 				// Adjust zoom expotentially -> \frac{x^{2}}{m}\cdot\frac{n}{m}
 				view.zoom += std::copysignf(
-					(std::pow(wheel * .6f, 2.f) / fitZoom) *
-						(view.zoom / fitZoom),
+					(std::pow(wheel * .6f, 2.f) /
+					 view.fitZoom) *
+						(view.zoom / view.fitZoom),
 					wheel);
-				if (view.zoom < fitZoom / 2)
-					view.zoom = fitZoom / 2;
-				if (view.zoom > fitZoom * 10)
-					view.zoom = fitZoom * 10;
+				if (view.zoom < view.fitZoom / 2)
+					view.zoom = view.fitZoom / 2;
+				if (view.zoom > view.fitZoom * 10)
+					view.zoom = view.fitZoom * 10;
 
 				// zoom to cursor
-				view.pan.x = mouse.x -
-					     (mouse.x - view.pan.x) *
-						     (view.zoom / prevZoom);
-				view.pan.y = mouse.y -
-					     (mouse.y - view.pan.y) *
-						     (view.zoom / prevZoom);
+				view.pan.x = mouse.x - (mouse.x - view.pan.x) *
+							       (view.zoom /
+								view.prevZoom);
+				view.pan.y = mouse.y - (mouse.y - view.pan.y) *
+							       (view.zoom /
+								view.prevZoom);
 			}
 		}
 
@@ -566,9 +558,10 @@ int main()
 			DrawRectangleLinesEx(canvasRect, 1.f, BLACK);
 		}
 
-		if (snapToGrid) {
+		if (app.SnapToGrid) {
 			Vector2 gridMouseCell = { 0 };
-			GuiGrid(canvasRect, "Canvas", (gridSize * view.zoom), 1,
+			GuiGrid(canvasRect, "Canvas",
+				(app.GridSize * view.zoom), 1,
 				&gridMouseCell); // Draw a fancy grid
 		}
 
@@ -578,13 +571,11 @@ int main()
 				std::numeric_limits<int32_t>::max()
 			};
 			DrawLineEx(to::Vector2_(view.pan),
-				   to::Vector2_({ AXIS_LEN,
-						  view.pan.y }),
-				   2.f, RED);
+				   to::Vector2_({ AXIS_LEN, view.pan.y }), 2.f,
+				   RED);
 			DrawLineEx(to::Vector2_(view.pan),
-				   to::Vector2_({ view.pan.x,
-						  AXIS_LEN }),
-				   2.f, GREEN);
+				   to::Vector2_({ view.pan.x, AXIS_LEN }), 2.f,
+				   GREEN);
 		}
 
 		// Draw the selected animation
@@ -618,7 +609,7 @@ int main()
 					animationVariant);
 
 				DrawUVRectDashed(to::Rectangle_(spriteSheet.Uv),
-						 view, fitZoom);
+						 view);
 
 				for (int32_t i{ 1 };
 				     i < spriteSheet.NumOfFrames.Value; ++i) {
@@ -632,12 +623,11 @@ int main()
 						(i /
 						 spriteSheet.Columns.Value) *
 						frameUv.height;
-					DrawUVRectDashed(frameUv, view,
-							 fitZoom);
+					DrawUVRectDashed(frameUv, view);
 				}
 
 				//DrawRectangleRec(spriteSheet.Uv, RED);
-				const auto g{ gridSize };
+				const auto g{ app.GridSize };
 
 				constexpr float baseControlExtent{ 5.f };
 				const auto controlExtent{ baseControlExtent };
@@ -663,7 +653,7 @@ int main()
 							spriteSheet.Uv.w;
 					}
 					spriteSheet.Uv.w =
-						std::max(snapToGrid ? g : 1,
+						std::max(app.SnapToGrid ? g : 1,
 							 spriteSheet.Uv.w);
 					if (spriteSheet.Uv.h < 0) {
 						spriteSheet.Uv.h *= -1.f;
@@ -671,7 +661,7 @@ int main()
 							spriteSheet.Uv.h;
 					}
 					spriteSheet.Uv.h =
-						std::max(snapToGrid ? g : 1,
+						std::max(app.SnapToGrid ? g : 1,
 							 spriteSheet.Uv.h);
 				}
 
@@ -690,14 +680,14 @@ int main()
 
 				//DrawRectanglePro({ 0,0,100 * zoom,100 * zoom }, mousePos, 0.f, RED);
 
-				RoundTo(mousePos.x, g, snapToGrid);
-				RoundTo(mousePos.y, g, snapToGrid);
+				RoundTo(mousePos.x, g, app.SnapToGrid);
+				RoundTo(mousePos.y, g, app.SnapToGrid);
 				//printf("Mousepos %f %f\n", mousePos.x, mousePos.y);
 				//DrawRectangleRec({ mousePos.x, mousePos.y, 10 * zoom, 10 * zoom }, YELLOW);
 				//DrawUVRectDashed({ mousePos.x, mousePos.y, 10, 10 });
 
 				// If zoom has changed
-				if (prevZoom != view.zoom) {
+				if (view.prevZoom != view.zoom) {
 					// Reset the delta to avoid unwanted mouse movement
 					spriteSheet.DeltaMousePos = mousePos;
 				}
@@ -716,7 +706,8 @@ int main()
 					    EControlIndex::TOP) {
 						auto tempY{ spriteSheet.Uv.y -
 							    mouseMov.y };
-						RoundTo(tempY, g, snapToGrid);
+						RoundTo(tempY, g,
+							app.SnapToGrid);
 						const auto movDiff{
 							tempY - spriteSheet.Uv.y
 						};
@@ -731,7 +722,7 @@ int main()
 					    EControlIndex::BOTTOM) {
 						spriteSheet.Uv.h -= mouseMov.y;
 						RoundTo(spriteSheet.Uv.h, g,
-							snapToGrid);
+							app.SnapToGrid);
 					}
 					if (spriteSheet.DraggingControlIndex &
 						    EControlIndex::LEFT &&
@@ -744,13 +735,13 @@ int main()
 							  << spriteSheet.Uv.w
 							  << std::endl;
 						RoundTo(spriteSheet.Uv.x, g,
-							snapToGrid);
+							app.SnapToGrid);
 					}
 					if (spriteSheet.DraggingControlIndex &
 					    EControlIndex::RIGHT) {
 						spriteSheet.Uv.w -= mouseMov.x;
 						RoundTo(spriteSheet.Uv.w, g,
-							snapToGrid);
+							app.SnapToGrid);
 					}
 				}
 				// Update mouse delta at the end
@@ -789,11 +780,11 @@ int main()
 				std::cout << "Trying to load:" << newImagePath
 					  << std::endl;
 				// Load texture if possible
-				LastError = LoadSpriteTexture(newImagePath,
-							      SpriteTexture);
-				if (!LastError.has_value()) {
+				app.LastError = LoadSpriteTexture(
+					newImagePath, SpriteTexture);
+				if (!app.LastError.has_value()) {
 					// Update path
-					ImagePath = std::move(newImagePath);
+					app.ImagePath = std::move(newImagePath);
 
 					// Reset view
 					{
@@ -807,7 +798,7 @@ int main()
 								  400.f,
 							  GetRenderHeight() -
 								  100.f });
-						fitZoom = view.zoom;
+						view.fitZoom = view.zoom;
 					}
 				}
 			}
@@ -819,8 +810,8 @@ int main()
 			const Rectangle rect{ TITLE_X_OFFSET, PAD,
 					      GetTextWidth("Grid size") + 80.f,
 					      30 };
-			(void)(NumericBox(rect, "Grid size", &gridSize, 0, 8196,
-					  gridSizeInputActive));
+			(void)(NumericBox(rect, "Grid size", &app.GridSize, 0,
+					  8196, app.GridSizeInputActive));
 
 			TITLE_X_OFFSET += rect.width + PAD;
 
@@ -831,7 +822,7 @@ int main()
 						 1, GRAY, LIGHTGRAY);
 				TITLE_X_OFFSET += PAD / 2;
 				GuiCheckBox({ TITLE_X_OFFSET, PAD + 5, 20, 20 },
-					    "Snap", &snapToGrid);
+					    "Snap", &app.SnapToGrid);
 			}
 			TITLE_X_OFFSET += 80.f;
 		}
@@ -992,14 +983,14 @@ int main()
 		}
 
 		// Draw error string messagebox
-		if (LastError.has_value()) {
+		if (app.LastError.has_value()) {
 			//DrawText(LastError->c_str(), 220, 20, 16, RED);
 			const auto result = GuiMessageBox(
 				Rectangle{ 0, 0, (float)GetRenderWidth(),
 					   (float)GetRenderHeight() },
-				"Error", LastError->c_str(), "OK");
+				"Error", app.LastError->c_str(), "OK");
 			if (result > 0) {
-				LastError.reset();
+				app.LastError.reset();
 			}
 		}
 
@@ -1007,8 +998,8 @@ int main()
 		{
 			DrawRectangle(0, GetRenderHeight() - 16,
 				      GetRenderWidth(), 16, DARKGRAY);
-			DrawText(ImagePath.c_str(), 10, GetRenderHeight() - 16,
-				 16, WHITE);
+			DrawText(app.ImagePath.c_str(), 10,
+				 GetRenderHeight() - 16, 16, WHITE);
 		}
 
 		// Export button
@@ -1072,8 +1063,8 @@ int main()
 					ActiveModal = EModalType::NONE;
 					// Create the animation
 					SpritesheetUv spriteSheet{};
-					spriteSheet.Uv = { 0, 0, gridSize,
-							   gridSize };
+					spriteSheet.Uv = { 0, 0, app.GridSize,
+							   app.GridSize };
 					AnimationNameToSpritesheet.emplace(
 						std::string(NewAnimationName),
 						std::move(spriteSheet));
