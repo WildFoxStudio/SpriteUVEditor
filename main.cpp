@@ -1,9 +1,36 @@
+/*
+MIT License
+
+Copyright (c) 2025 Kirichenko Stanislav
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
 #ifndef RAYGUI_IMPLEMENTATION
 #define RAYGUI_IMPLEMENTATION
 #endif
+
 #include "raygui.h"
 
-#include "raylib.h"
+#include "app.hpp"
+#include "geometry.hpp"
+
 #include "rlgl.h"
 #include <nlohmann/json.hpp>
 
@@ -19,49 +46,6 @@
 #include <variant>
 
 using json = nlohmann::json;
-
-template <typename T> struct TVec2 {
-	T x{}, y{};
-};
-
-template <typename T> struct TRect {
-	T x{}, y{}, w{}, h{};
-};
-
-// Use int32_t for all coordinates and sizes since raygui/raylib use int for those
-// Also avoid floating point precision issues for pixel coordinates
-using Vec2 = TVec2<int32_t>;
-using Rect = TRect<int32_t>;
-
-namespace to
-{
-
-Vector2 Vector2_(const Vec2 &vec)
-{
-	return { static_cast<float>(vec.x), static_cast<float>(vec.y) };
-}
-
-Rectangle Rectangle_(const Rect &rect)
-{
-	return { static_cast<float>(rect.x), static_cast<float>(rect.y),
-		 static_cast<float>(rect.w), static_cast<float>(rect.h) };
-}
-
-}
-
-namespace from
-{
-Vec2 Vector2_(const Vector2 &vec)
-{
-	return { static_cast<int32_t>(vec.x), static_cast<int32_t>(vec.y) };
-}
-
-Rectangle Rectangle_(const Rect &rect)
-{
-	return { static_cast<float>(rect.x), static_cast<float>(rect.y),
-		 static_cast<float>(rect.w), static_cast<float>(rect.h) };
-}
-}
 
 /* Gui padding*/
 constexpr float PAD{ 10.f };
@@ -628,26 +612,15 @@ void ExportMetadata(const std::string &imagePath)
 	//of << root.dump(4);
 }
 
-Font fontRoboto{};
 int main()
 {
-	SetConfigFlags(FLAG_WINDOW_MAXIMIZED | FLAG_WINDOW_RESIZABLE |
-		       FLAG_MSAA_4X_HINT);
-	InitWindow(1600, 900, "Sprite Editor (Raylib + Raygui)");
-
-	SetTargetFPS(GetMonitorRefreshRate(0));
-
-	fontRoboto = LoadFontEx("fonts/Roboto-Bold.ttf", 16, nullptr, 250);
-	if (!fontRoboto.texture.id) {
-		std::cout
-			<< "Failed to load Roboto font, falling back to default font."
-			<< std::endl;
-	} else {
-		GuiSetFont(fontRoboto);
+	App app(1600, 900, "Sprite Sheet UV Editor");
+	if (app.GetFont().texture.id) {
+		GuiSetFont(app.GetFont());
 	}
 	GuiSetStyle(DEFAULT, TEXT_SIZE, 16);
 
-	while (!WindowShouldClose()) {
+	while (app.ShouldRun()) {
 		// -----------------------------------------------------
 		// Mouse panning
 		// -----------------------------------------------------
@@ -1350,7 +1323,5 @@ int main()
 		EndDrawing();
 	}
 
-	UnloadFont(fontRoboto);
-	CloseWindow();
 	return 0;
 }
