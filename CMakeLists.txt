@@ -91,6 +91,11 @@ target_include_directories(sprite_uv_editor PRIVATE "source")
 # Optional: define RAYGUI_IMPLEMENTATION in one CPP file
 target_compile_definitions(sprite_uv_editor PRIVATE RAYGUI_IMPLEMENTATION)
 
+# Set the debug working directory to the content folder
+set_target_properties(sprite_uv_editor PROPERTIES
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/content"
+)
+
 # Copy resources to build directory if needed
 # add_custom_command(TARGET sprite_uv_editor POST_BUILD
 #     COMMAND ${CMAKE_COMMAND} -E copy_if_different

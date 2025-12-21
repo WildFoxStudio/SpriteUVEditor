@@ -607,13 +607,23 @@ void ExportMetadata(const std::string& imagePath) {
 	//of << root.dump(4);
 }
 
+Font fontRoboto{};
 int main() {
 	SetConfigFlags(FLAG_WINDOW_MAXIMIZED | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
 	InitWindow(1600, 900, "Sprite Editor (Raylib + Raygui)");
 
-	SetTargetFPS(60);
+	SetTargetFPS(GetMonitorRefreshRate(0));
 
-	GuiSetStyle(DEFAULT, TEXT_SIZE, 18);
+	fontRoboto = LoadFontEx("fonts/Roboto-Bold.ttf", 16, nullptr, 250);
+	if (!fontRoboto.texture.id)
+	{
+		std::cout << "Failed to load Roboto font, falling back to default font." << std::endl;
+	}
+	else
+	{
+		GuiSetFont(fontRoboto);
+	}
+	GuiSetStyle(DEFAULT, TEXT_SIZE, 16);
 
 	while (!WindowShouldClose()) {
 		// -----------------------------------------------------
@@ -1151,6 +1161,8 @@ int main() {
 		EndDrawing();
 	}
 
+
+	UnloadFont(fontRoboto);
 	CloseWindow();
 	return 0;
 }
