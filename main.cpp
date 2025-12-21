@@ -20,7 +20,55 @@
 
 using json = nlohmann::json;
 
+template<typename T>
+struct TVec2 {
+	T x{}, y{};
+};
+
+template<typename T>
+struct TRect {
+	T x{}, y{}, w{}, h{};
+};
+
+
+// Use int32_t for all coordinates and sizes since raygui/raylib use int for those
+// Also avoid floating point precision issues for pixel coordinates
+using Vec2 = TVec2<int32_t>;
+using Rect = TRect<int32_t>;
+
+namespace to
+{
+
+	Vector2 Vector2_(const Vec2& vec)
+	{
+		return { static_cast<float>(vec.x), static_cast<float>(vec.y) };
+	}
+
+	Rectangle Rectangle_(const Rect& rect)
+	{
+		return { static_cast<float>(rect.x), static_cast<float>(rect.y), static_cast<float>(rect.w), static_cast<float>(rect.h) };
+	}
+
+
+}
+
+namespace from
+{
+	Vec2 Vector2_(const Vector2& vec)
+	{
+		return { static_cast<int32_t>(vec.x), static_cast<int32_t>(vec.y) };
+	}
+
+	Rectangle Rectangle_(const Rect& rect)
+	{
+		return { static_cast<float>(rect.x), static_cast<float>(rect.y), static_cast<float>(rect.w), static_cast<float>(rect.h) };
+	}
+}
+
+/* Gui padding*/
 constexpr float PAD{ 10.f };
+
+/* The loaded sprite sheet texture */
 std::optional<Texture2D> SpriteTexture{};
 
 enum class EAnimationType
@@ -175,7 +223,7 @@ struct Properties
 
 struct SpritesheetUv : public Properties
 {
-	Rectangle Uv{};
+	Rect Uv{};
 
 	//Properties
 	Property Rect[4]{};
@@ -190,7 +238,7 @@ struct SpritesheetUv : public Properties
 	int64_t StartTimeMs{};
 
 	int32_t DraggingControlIndex{};
-	Vector2 DeltaMousePos{};
+	Vec2 DeltaMousePos{};
 
 	void DrawProperties(Rectangle rect) override
 	{
@@ -198,21 +246,21 @@ struct SpritesheetUv : public Properties
 
 		// Draw UV Rect
 		{
-			Rect[0].Value = static_cast<int32_t>(Uv.x);
+			Rect[0].Value = Uv.x;
 			(void)(NumericBox(rect, "X:", &Rect[0].Value, -INT32_MAX, INT32_MAX, Rect[0].ActiveBox));
 			Uv.x = static_cast<float>(Rect[0].Value);
 			rect.y += 30 + PAD;
-			Rect[1].Value = static_cast<int32_t>(Uv.y);
+			Rect[1].Value = Uv.y;
 			(void)(NumericBox(rect, "Y:", &Rect[1].Value, -INT32_MAX, INT32_MAX, Rect[1].ActiveBox));
 			Uv.y = static_cast<float>(Rect[1].Value);
 			rect.y += 30 + PAD;
-			Rect[2].Value = static_cast<int32_t>(Uv.width);
+			Rect[2].Value = Uv.w;
 			(void)(NumericBox(rect, "Width:", &Rect[2].Value, -INT32_MAX, INT32_MAX, Rect[2].ActiveBox));
-			Uv.width = static_cast<float>(Rect[2].Value);
+			Uv.w = static_cast<float>(Rect[2].Value);
 			rect.y += 30 + PAD;
-			Rect[3].Value = static_cast<int32_t>(Uv.height);
+			Rect[3].Value = Uv.h;
 			(void)(NumericBox(rect, "Height:", &Rect[3].Value, -INT32_MAX, INT32_MAX, Rect[3].ActiveBox));
-			Uv.height = static_cast<float>(Rect[3].Value);
+			Uv.h = static_cast<float>(Rect[3].Value);
 			rect.y += 30 + PAD;
 		}
 
@@ -240,22 +288,22 @@ struct SpritesheetUv : public Properties
 
 			Rectangle spriteRect{ previewRect };
 			// Make the sprite rect fit inside preview rect maintaining aspect ratio
-			if (Uv.width > Uv.height)
+			if (Uv.w > Uv.h)
 			{
-				const auto spriteAspectRatio = Uv.height / (float)Uv.width;
+				const auto spriteAspectRatio = Uv.h / (float)Uv.w;
 				spriteRect.width = previewRect.width;
 				spriteRect.height = previewRect.width * spriteAspectRatio;
 			}
 			else
 			{
-				const auto spriteAspectRatio = Uv.width / (float)Uv.height;
+				const auto spriteAspectRatio = Uv.w / (float)Uv.h;
 				spriteRect.height = previewRect.height;
 				spriteRect.width = previewRect.height * spriteAspectRatio;
 			}
 			// Center the sprite
 			{
-			spriteRect.x += (previewRect.width - spriteRect.width) * .5f;
-			spriteRect.y += (previewRect.height - spriteRect.height) * .5f;
+				spriteRect.x += (previewRect.width - spriteRect.width) * .5f;
+				spriteRect.y += (previewRect.height - spriteRect.height) * .5f;
 			}
 
 			// Draw preview background
@@ -263,8 +311,8 @@ struct SpritesheetUv : public Properties
 
 
 			const Vector2 uvOffset{
-				(CurrentFrameIndex.Value % Columns.Value) * Uv.width,
-				(CurrentFrameIndex.Value / Columns.Value) * Uv.height
+				(CurrentFrameIndex.Value % Columns.Value) * Uv.w,
+				(CurrentFrameIndex.Value / Columns.Value) * Uv.h
 			};
 
 			const Vector2 uvTopLeft{
@@ -273,8 +321,8 @@ struct SpritesheetUv : public Properties
 			};
 
 			const Vector2 uvBottomRight{
-				uvTopLeft.x + Uv.width,
-				uvTopLeft.y + Uv.height
+				uvTopLeft.x + Uv.w,
+				uvTopLeft.y + Uv.h
 			};
 
 			// Draw the UV rect
@@ -356,7 +404,7 @@ struct KeyframeUv : public Properties
 EModalType ActiveModal{ EModalType::NONE };
 std::string ImagePath{};
 std::optional<std::string> LastError{};
-int gridSize{ 64 };
+int32_t gridSize{ 64 };
 bool gridSizeInputActive{};
 
 Vector2 pan = { 0, 0 };
@@ -645,8 +693,8 @@ int main() {
 
 		const bool hasValidSelectedAnimation{ ListState.activeIndex > -1 && !ImmutableTransientAnimationNames.empty() && ListState.activeIndex < ImmutableTransientAnimationNames.size() };
 
-		const int32_t CANVAS_WIDTH{ SpriteTexture.has_value() ? SpriteTexture->width : 0 };
-		const int32_t CANVAS_HEIGHT{ SpriteTexture.has_value() ? SpriteTexture->height : 0 };
+		const int32_t CANVAS_WIDTH{ SpriteTexture.has_value() ? SpriteTexture->width : 1920 };
+		const int32_t CANVAS_HEIGHT{ SpriteTexture.has_value() ? SpriteTexture->height : 1080 };
 
 		const Rectangle canvasRect{ pan.x, pan.y,
 				CANVAS_WIDTH * zoom, CANVAS_HEIGHT * zoom };
@@ -683,11 +731,11 @@ int main() {
 			{
 				auto& spriteSheet = std::get<SpritesheetUv>(animationVariant);
 
-				DrawUVRectDashed(spriteSheet.Uv);
+				DrawUVRectDashed(to::Rectangle_(spriteSheet.Uv));
 
 				for (int32_t i{ 1 }; i < spriteSheet.NumOfFrames.Value; ++i)
 				{
-					Rectangle frameUv{ spriteSheet.Uv };
+					Rectangle frameUv{ to::Rectangle_(spriteSheet.Uv) };
 					frameUv.x += (i % spriteSheet.Columns.Value) * frameUv.width;
 					frameUv.y += (i / spriteSheet.Columns.Value) * frameUv.height;
 					DrawUVRectDashed(frameUv);
@@ -698,7 +746,7 @@ int main() {
 
 				constexpr float baseControlExtent{ 5.f };
 				const auto controlExtent{ baseControlExtent };
-				const int32_t focusedControlPoints{ DrawUvRectControlsGetControlIndex(spriteSheet.Uv, controlExtent) };
+				const int32_t focusedControlPoints{ DrawUvRectControlsGetControlIndex(to::Rectangle_(spriteSheet.Uv), controlExtent) };
 				if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
 				{
 					spriteSheet.DraggingControlIndex = focusedControlPoints;
@@ -709,23 +757,28 @@ int main() {
 						spriteSheet.DraggingControlIndex = EControlIndex::NONE;
 
 						// Normalize sane rectangle always positive values
-						if (std::signbit(spriteSheet.Uv.width))
+						if (spriteSheet.Uv.w < 0)
 						{
-							spriteSheet.Uv.width *= -1.f;
-							spriteSheet.Uv.x -= spriteSheet.Uv.width;
+							spriteSheet.Uv.w *= -1;
+							spriteSheet.Uv.x -= spriteSheet.Uv.w;
 						}
-						spriteSheet.Uv.width = std::max(snapToGrid ? g : 1.f, spriteSheet.Uv.width);
-						if (std::signbit(spriteSheet.Uv.height))
+						spriteSheet.Uv.w = std::max(snapToGrid ? g : 1, spriteSheet.Uv.w);
+						if (spriteSheet.Uv.h < 0)
 						{
-							spriteSheet.Uv.height *= -1.f;
-							spriteSheet.Uv.y -= spriteSheet.Uv.height;
+							spriteSheet.Uv.h *= -1.f;
+							spriteSheet.Uv.y -= spriteSheet.Uv.h;
 						}
-						spriteSheet.Uv.height = std::max(snapToGrid ? g : 1.f, spriteSheet.Uv.height);
+						spriteSheet.Uv.h = std::max(snapToGrid ? g : 1, spriteSheet.Uv.h);
 					}
 
-				auto mousePos{ GetMousePosition() };
-				mousePos.x = (mousePos.x * (1.f / zoom)) - pan.x;
-				mousePos.y = (mousePos.y * (1.f / zoom)) - pan.y;
+				// Get mouse pos in image space
+				Vec2 mousePos{};
+				{
+					auto rayMousePos{ GetMousePosition() };
+					rayMousePos.x = (rayMousePos.x * (1.f / zoom)) - pan.x;
+					rayMousePos.y = (rayMousePos.y * (1.f / zoom)) - pan.y;
+					mousePos = from::Vector2_(rayMousePos);
+				}
 
 				//DrawRectanglePro({ 0,0,100 * zoom,100 * zoom }, mousePos, 0.f, RED);
 
@@ -739,36 +792,39 @@ int main() {
 				if (prevZoom != zoom)
 				{
 					// Reset the delta to avoid unwanted mouse movement
-					spriteSheet.DeltaMousePos = { mousePos };
+					spriteSheet.DeltaMousePos = mousePos;
 				}
 
 				if (spriteSheet.DraggingControlIndex != EControlIndex::NONE)
 				{
 
 					// Handle dragging
-					Vector2 mouseMov{ spriteSheet.DeltaMousePos.x - mousePos.x, spriteSheet.DeltaMousePos.y - mousePos.y };
+					Vec2 mouseMov{ spriteSheet.DeltaMousePos.x - mousePos.x, spriteSheet.DeltaMousePos.y - mousePos.y };
 
 					if (spriteSheet.DraggingControlIndex & EControlIndex::TOP)
 					{
-						spriteSheet.Uv.y -= mouseMov.y;
-						spriteSheet.Uv.height += mouseMov.y;
-						RoundTo(spriteSheet.Uv.y, g, snapToGrid);
+						auto tempY{ spriteSheet.Uv.y - mouseMov.y };
+						RoundTo(tempY, g, snapToGrid);
+						const auto movDiff{ tempY - spriteSheet.Uv.y };
+						spriteSheet.Uv.y = tempY;
+						spriteSheet.Uv.h -= std::copysignf(movDiff, mouseMov.y * -1.f);
 					}
 					if (spriteSheet.DraggingControlIndex & EControlIndex::BOTTOM)
 					{
-						spriteSheet.Uv.height -= mouseMov.y;
-						RoundTo(spriteSheet.Uv.height, g, snapToGrid);
+						spriteSheet.Uv.h -= mouseMov.y;
+						RoundTo(spriteSheet.Uv.h, g, snapToGrid);
 					}
-					if (spriteSheet.DraggingControlIndex & EControlIndex::LEFT)
+					if (spriteSheet.DraggingControlIndex & EControlIndex::LEFT && mouseMov.x != 0.f)
 					{
 						spriteSheet.Uv.x -= mouseMov.x;
-						spriteSheet.Uv.width += mouseMov.x;
+						spriteSheet.Uv.w += mouseMov.x;
+						std::cout << "MouseMovX:" << mouseMov.x << " width:" << spriteSheet.Uv.w << std::endl;
 						RoundTo(spriteSheet.Uv.x, g, snapToGrid);
 					}
 					if (spriteSheet.DraggingControlIndex & EControlIndex::RIGHT)
 					{
-						spriteSheet.Uv.width -= mouseMov.x;
-						RoundTo(spriteSheet.Uv.width, g, snapToGrid);
+						spriteSheet.Uv.w -= mouseMov.x;
+						RoundTo(spriteSheet.Uv.w, g, snapToGrid);
 					}
 
 
@@ -884,15 +940,10 @@ int main() {
 			const Rectangle fitViewRect{ TITLE_X_OFFSET, PAD, GetTextWidth("Fit view") + PAD, 30 };
 			if (GuiButton(fitViewRect, "Fit view"))
 			{
-				if (SpriteTexture.has_value())
-				{
-					// Reset view
-					{
-						pan = { 1, PAD * 2 + 30 };
-						//Set the zoom to fit the image on the max size
-						zoom = ZoomFitIntoRect(SpriteTexture->width, SpriteTexture->height, { 0, 0, GetRenderWidth() - 400.f, GetRenderHeight() - 100.f });
-					}
-				}
+				// Reset view
+				pan = { 1, PAD * 2 + 30 };
+				//Set the zoom to fit the image on the max size
+				zoom = ZoomFitIntoRect(CANVAS_WIDTH, CANVAS_HEIGHT, { 0, 0, GetRenderWidth() - 400.f, GetRenderHeight() - 100.f });
 			}
 			TITLE_X_OFFSET += fitViewRect.width + PAD;
 		}
@@ -1063,7 +1114,7 @@ int main() {
 						ActiveModal = EModalType::NONE;
 						// Create the animation
 						SpritesheetUv spriteSheet{};
-						spriteSheet.Uv = { 0,0, (float)gridSize, (float)gridSize };
+						spriteSheet.Uv = { 0,0, gridSize, gridSize };
 						AnimationNameToSpritesheet.emplace(std::string(NewAnimationName), std::move(spriteSheet));
 						ListState.activeIndex = AnimationNameToSpritesheet.size() - 1;
 					}
