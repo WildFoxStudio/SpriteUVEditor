@@ -24,32 +24,17 @@ SOFTWARE.
 
 #pragma once
 
-#include <cstdint>
-#include <string>
-#include <vector>
-#include <algorithm>
-
 #include "raylib.h"
 
-class App final {
+#include <string>
+
+class Project final {
     public:
-	int32_t GridSize{ 64 };
-	bool GridSizeInputActive{}; // Gui box active state
-	bool DrawGrid{ true };
-	bool SnapToGrid{ true };
-
-	App(int32_t width, int32_t height, const char *title);
-	~App();
-	bool ShouldRun() const;
-
-	Font GetFont() const
-	{
-		return fontRoboto;
-	}
-
-	bool OpenFileDialog(std::string &filePath,
-			    const std::vector<std::string> &extension) const;
+	bool SaveToFile(const std::string &filePath) const;
+	bool LoadFromFile(const std::string &filePath);
 
     private:
-	Font fontRoboto{};
+	Project(Texture2D sprite);
+
+	Texture2D texture{};
 };

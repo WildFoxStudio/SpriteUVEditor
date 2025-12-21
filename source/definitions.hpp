@@ -25,31 +25,40 @@ SOFTWARE.
 #pragma once
 
 #include <cstdint>
-#include <string>
-#include <vector>
-#include <algorithm>
 
-#include "raylib.h"
+#include "geometry.hpp"
 
-class App final {
-    public:
-	int32_t GridSize{ 64 };
-	bool GridSizeInputActive{}; // Gui box active state
-	bool DrawGrid{ true };
-	bool SnapToGrid{ true };
+enum class EAnimationType {
+	SPRITESHEET,
+	KEYFRAME,
+};
 
-	App(int32_t width, int32_t height, const char *title);
-	~App();
-	bool ShouldRun() const;
+enum class EModalType {
+	NONE,
+	CREATE_ANIMATION,
+	CONFIRM_DELETE,
+};
 
-	Font GetFont() const
+enum EControlIndex : int32_t {
+	NONE = 0,
+	TOP = 1 << 1,
+	BOTTOM = 1 << 2,
+	LEFT = 1 << 3,
+	RIGHT = 1 << 4,
+	CENTER = TOP | BOTTOM | LEFT | RIGHT,
+};
+
+struct View {
+	float zoom{ 1.f };
+	Vec2 pan{};
+
+	Rectangle TransformRect(const Rectangle &rect) const
 	{
-		return fontRoboto;
+		Rectangle transformedRect{};
+		transformedRect.x = rect.x * zoom + pan.x;
+		transformedRect.y = rect.y * zoom + pan.y;
+		transformedRect.width = rect.width * zoom;
+		transformedRect.height = rect.height * zoom;
+		return transformedRect;
 	}
-
-	bool OpenFileDialog(std::string &filePath,
-			    const std::vector<std::string> &extension) const;
-
-    private:
-	Font fontRoboto{};
 };

@@ -75,10 +75,11 @@ endif()
 # -------------------------------------------------
 # 5. Your executable
 # -------------------------------------------------
-add_executable(sprite_uv_editor main.cpp source/app.hpp source/geometry.hpp)
+add_executable(sprite_uv_editor main.cpp source/definitions.hpp source/app.hpp source/geometry.hpp source/project.hpp source/drawing.hpp)
 
 target_sources(sprite_uv_editor PRIVATE 
     source/app.cpp 
+    source/project.cpp
 )
 
 target_link_libraries(sprite_uv_editor PRIVATE 

@@ -27,11 +27,13 @@ SOFTWARE.
 #endif
 
 #include "raygui.h"
+#include "rlgl.h"
 
+#include "definitions.hpp"
 #include "app.hpp"
 #include "geometry.hpp"
-
-#include "rlgl.h"
+#include "project.hpp"
+#include "drawing.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -45,30 +47,10 @@ SOFTWARE.
 using json = nlohmann::json;
 
 /* Gui padding*/
-constexpr float PAD{ 10.f };
+constexpr int32_t PAD{ 10 };
 
 /* The loaded sprite sheet texture */
 std::optional<Texture2D> SpriteTexture{};
-
-enum class EAnimationType {
-	SPRITESHEET,
-	KEYFRAME,
-};
-
-enum class EModalType {
-	NONE,
-	CREATE_ANIMATION,
-	CONFIRM_DELETE,
-};
-
-enum EControlIndex : int32_t {
-	NONE = 0,
-	TOP = 1 << 1,
-	BOTTOM = 1 << 2,
-	LEFT = 1 << 3,
-	RIGHT = 1 << 4,
-	CENTER = TOP | BOTTOM | LEFT | RIGHT,
-};
 
 #pragma region Helpers
 
@@ -385,9 +367,9 @@ std::optional<std::string> LastError{};
 int32_t gridSize{ 64 };
 bool gridSizeInputActive{};
 
-Vector2 pan = { 0, 0 };
+View view{};
 float fitZoom = 1.0f;
-float zoom = 1.0f;
+
 bool drawGrid{ true };
 bool snapToGrid{ true };
 
@@ -427,144 +409,20 @@ Rectangle ScreenToImageRect(const Rectangle &r)
 {
 	if (!SpriteTexture.has_value())
 		return {};
-	return { (r.x - pan.x) / (zoom * SpriteTexture->width),
-		 (r.y - pan.y) / (zoom * SpriteTexture->height),
-		 r.width / (zoom * SpriteTexture->width),
-		 r.height / (zoom * SpriteTexture->height) };
+	return { (r.x - view.pan.x) / (view.zoom * SpriteTexture->width),
+		 (r.y - view.pan.y) / (view.zoom * SpriteTexture->height),
+		 r.width / (view.zoom * SpriteTexture->width),
+		 r.height / (view.zoom * SpriteTexture->height) };
 }
 
 Rectangle ImageToScreenRect(const Rectangle &r)
 {
 	if (!SpriteTexture.has_value())
 		return {};
-	return { pan.x + r.x * SpriteTexture->width * zoom,
-		 pan.y + r.y * SpriteTexture->height * zoom,
-		 r.width * SpriteTexture->width * zoom,
-		 r.height * SpriteTexture->height * zoom };
-}
-
-void DrawDashedLine(Vector2 start, Vector2 end, float dashLength,
-		    float gapLength, float thickness, Color color)
-{
-	float dx = end.x - start.x;
-	float dy = end.y - start.y;
-	float length = sqrtf(dx * dx + dy * dy);
-
-	float dirX = dx / length;
-	float dirY = dy / length;
-
-	float drawn = 0.0f;
-	while (drawn < length) {
-		float segment = fminf(dashLength, length - drawn);
-
-		Vector2 a = { start.x + dirX * drawn, start.y + dirY * drawn };
-		Vector2 b = { start.x + dirX * (drawn + segment),
-			      start.y + dirY * (drawn + segment) };
-
-		DrawLineEx(a, b, thickness, color);
-
-		drawn += dashLength + gapLength;
-	}
-}
-
-void DrawUVRectDashed(Rectangle rect)
-{
-	constexpr Color dashColor{ DARKBLUE };
-	rect.x *= zoom;
-	rect.y *= zoom;
-	rect.x += pan.x;
-	rect.y += pan.y;
-
-	rect.width *= zoom;
-	rect.height *= zoom;
-
-	constexpr float baseThickness{ 1.8f };
-	constexpr float dashLen{ 10 * baseThickness };
-	constexpr float dashGap{ 2 * baseThickness };
-	const auto thickness{ baseThickness * fitZoom };
-
-	//DrawRectangleLinesEx(rect, 1.f, BLACK);
-	DrawDashedLine({ rect.x, rect.y }, { rect.x + rect.width, rect.y },
-		       dashLen, dashGap, thickness, dashColor);
-	DrawDashedLine({ rect.x, rect.y + rect.height },
-		       { rect.x + rect.width, rect.y + rect.height }, dashLen,
-		       dashGap, thickness, dashColor);
-
-	DrawDashedLine({ rect.x, rect.y }, { rect.x, rect.y + rect.height },
-		       dashLen, dashGap, thickness, dashColor);
-	DrawDashedLine({ rect.x + rect.width, rect.y },
-		       { rect.x + rect.width, rect.y + rect.height }, dashLen,
-		       dashGap, thickness, dashColor);
-}
-
-bool DrawControl(Vector2 origin, float controlExtent, Color baseColor)
-{
-	constexpr Color focusedColor{ BLUE };
-	const Rectangle cRect{ origin.x - controlExtent,
-			       origin.y - controlExtent, controlExtent * 2.f,
-			       controlExtent * 2.f };
-
-	const bool mouseHover =
-		CheckCollisionPointRec(GetMousePosition(), cRect);
-
-	DrawRectangleRec(cRect, mouseHover ? focusedColor : baseColor);
-
-	return mouseHover;
-}
-
-int32_t DrawUvRectControlsGetControlIndex(Rectangle rect, float controlExtent)
-{
-	constexpr Color controlColor{ DARKBLUE };
-
-	rect.x *= zoom;
-	rect.y *= zoom;
-	rect.x += pan.x;
-	rect.y += pan.y;
-
-	rect.width *= zoom;
-	rect.height *= zoom;
-
-	int32_t index{ EControlIndex::NONE };
-	if (DrawControl({ rect.x + rect.width * .5f, rect.y }, controlExtent,
-			controlColor)) {
-		index = { EControlIndex::TOP };
-	}
-	if (DrawControl({ rect.x, rect.y }, controlExtent, controlColor)) {
-		index = { EControlIndex::TOP | EControlIndex::LEFT };
-	}
-	if (DrawControl({ rect.x + rect.width, rect.y }, controlExtent,
-			controlColor)) {
-		index = { EControlIndex::TOP | EControlIndex::RIGHT };
-	}
-	if (DrawControl({ rect.x + rect.width * .5f, rect.y + rect.height },
-			controlExtent, controlColor)) {
-		index = { EControlIndex::BOTTOM };
-	}
-	if (DrawControl({ rect.x, rect.y + rect.height * .5f }, controlExtent,
-			controlColor)) {
-		index = { EControlIndex::LEFT };
-	}
-	if (DrawControl({ rect.x, rect.y + rect.height }, controlExtent,
-			controlColor)) {
-		index = { EControlIndex::BOTTOM | EControlIndex::LEFT };
-	}
-	if (DrawControl({ rect.x + rect.width, rect.y + rect.height * .5f },
-			controlExtent, controlColor)) {
-		index = { EControlIndex::RIGHT };
-	}
-	if (DrawControl({ rect.x + rect.width, rect.y + rect.height },
-			controlExtent, controlColor)) {
-		index = { EControlIndex::BOTTOM | EControlIndex::RIGHT };
-	}
-	Color centerColor{ WHITE };
-	centerColor.a = 60;
-	if (DrawControl({ rect.x + rect.width * .5f,
-			  rect.y + rect.height * .5f },
-			controlExtent * 2, WHITE)) {
-		index = { EControlIndex::CENTER };
-	}
-
-	return index;
+	return { view.pan.x + r.x * SpriteTexture->width * view.zoom,
+		 view.pan.y + r.y * SpriteTexture->height * view.zoom,
+		 r.width * SpriteTexture->width * view.zoom,
+		 r.height * SpriteTexture->height * view.zoom };
 }
 
 void ExportMetadata(const std::string &imagePath)
@@ -604,34 +462,36 @@ int main()
 		// -----------------------------------------------------
 		if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
 			Vector2 d = GetMouseDelta();
-			pan.x += d.x;
-			pan.y += d.y;
+			view.pan.x += d.x;
+			view.pan.y += d.y;
 		}
 
 		// -----------------------------------------------------
 		// Mouse wheel zoom
 		// -----------------------------------------------------
-		const float prevZoom = zoom;
+		const float prevZoom = view.zoom;
 		if (!ListState.ShowList) {
 			float wheel = GetMouseWheelMove();
 			if (wheel != 0) {
 				Vector2 mouse = GetMousePosition();
 
 				// Adjust zoom expotentially -> \frac{x^{2}}{m}\cdot\frac{n}{m}
-				zoom += std::copysignf(
+				view.zoom += std::copysignf(
 					(std::pow(wheel * .6f, 2.f) / fitZoom) *
-						(zoom / fitZoom),
+						(view.zoom / fitZoom),
 					wheel);
-				if (zoom < fitZoom / 2)
-					zoom = fitZoom / 2;
-				if (zoom > fitZoom * 10)
-					zoom = fitZoom * 10;
+				if (view.zoom < fitZoom / 2)
+					view.zoom = fitZoom / 2;
+				if (view.zoom > fitZoom * 10)
+					view.zoom = fitZoom * 10;
 
 				// zoom to cursor
-				pan.x = mouse.x -
-					(mouse.x - pan.x) * (zoom / prevZoom);
-				pan.y = mouse.y -
-					(mouse.y - pan.y) * (zoom / prevZoom);
+				view.pan.x = mouse.x -
+					     (mouse.x - view.pan.x) *
+						     (view.zoom / prevZoom);
+				view.pan.y = mouse.y -
+					     (mouse.y - view.pan.y) *
+						     (view.zoom / prevZoom);
 			}
 		}
 
@@ -693,12 +553,14 @@ int main()
 						     SpriteTexture->height :
 						     1080 };
 
-		const Rectangle canvasRect{ pan.x, pan.y, CANVAS_WIDTH * zoom,
-					    CANVAS_HEIGHT * zoom };
+		const Rectangle canvasRect{ view.pan.x, view.pan.y,
+					    CANVAS_WIDTH * view.zoom,
+					    CANVAS_HEIGHT * view.zoom };
 
 		// Draw sprite texture
 		if (SpriteTexture.has_value()) {
-			DrawTextureEx(SpriteTexture.value(), pan, 0, zoom,
+			DrawTextureEx(SpriteTexture.value(),
+				      to::Vector2_(view.pan), 0, view.zoom,
 				      WHITE);
 			// Draw outline
 			DrawRectangleLinesEx(canvasRect, 1.f, BLACK);
@@ -706,19 +568,23 @@ int main()
 
 		if (snapToGrid) {
 			Vector2 gridMouseCell = { 0 };
-			GuiGrid(canvasRect, "Canvas", (gridSize * zoom), 1,
+			GuiGrid(canvasRect, "Canvas", (gridSize * view.zoom), 1,
 				&gridMouseCell); // Draw a fancy grid
 		}
 
 		// Draw canvas origin axis
 		{
-			constexpr float AXIS_LEN{ 640000 };
-			DrawLineEx(Vector2{ pan.x, pan.y },
-				   Vector2{ pan.x + AXIS_LEN, pan.y }, 2.f,
-				   RED);
-			DrawLineEx(Vector2{ pan.x, pan.y },
-				   Vector2{ pan.x, pan.y + AXIS_LEN }, 2.f,
-				   GREEN);
+			constexpr int32_t AXIS_LEN{
+				std::numeric_limits<int32_t>::max()
+			};
+			DrawLineEx(to::Vector2_(view.pan),
+				   to::Vector2_({ AXIS_LEN,
+						  view.pan.y }),
+				   2.f, RED);
+			DrawLineEx(to::Vector2_(view.pan),
+				   to::Vector2_({ view.pan.x,
+						  AXIS_LEN }),
+				   2.f, GREEN);
 		}
 
 		// Draw the selected animation
@@ -751,8 +617,8 @@ int main()
 				auto &spriteSheet = std::get<SpritesheetUv>(
 					animationVariant);
 
-				DrawUVRectDashed(
-					to::Rectangle_(spriteSheet.Uv));
+				DrawUVRectDashed(to::Rectangle_(spriteSheet.Uv),
+						 view, fitZoom);
 
 				for (int32_t i{ 1 };
 				     i < spriteSheet.NumOfFrames.Value; ++i) {
@@ -766,7 +632,8 @@ int main()
 						(i /
 						 spriteSheet.Columns.Value) *
 						frameUv.height;
-					DrawUVRectDashed(frameUv);
+					DrawUVRectDashed(frameUv, view,
+							 fitZoom);
 				}
 
 				//DrawRectangleRec(spriteSheet.Uv, RED);
@@ -777,7 +644,7 @@ int main()
 				const int32_t focusedControlPoints{
 					DrawUvRectControlsGetControlIndex(
 						to::Rectangle_(spriteSheet.Uv),
-						controlExtent)
+						view, controlExtent)
 				};
 				if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
 					spriteSheet.DraggingControlIndex =
@@ -812,12 +679,12 @@ int main()
 				Vec2 mousePos{};
 				{
 					auto rayMousePos{ GetMousePosition() };
-					rayMousePos.x =
-						(rayMousePos.x * (1.f / zoom)) -
-						pan.x;
-					rayMousePos.y =
-						(rayMousePos.y * (1.f / zoom)) -
-						pan.y;
+					rayMousePos.x = (rayMousePos.x *
+							 (1.f / view.zoom)) -
+							view.pan.x;
+					rayMousePos.y = (rayMousePos.y *
+							 (1.f / view.zoom)) -
+							view.pan.y;
 					mousePos = from::Vector2_(rayMousePos);
 				}
 
@@ -830,7 +697,7 @@ int main()
 				//DrawUVRectDashed({ mousePos.x, mousePos.y, 10, 10 });
 
 				// If zoom has changed
-				if (prevZoom != zoom) {
+				if (prevZoom != view.zoom) {
 					// Reset the delta to avoid unwanted mouse movement
 					spriteSheet.DeltaMousePos = mousePos;
 				}
@@ -891,54 +758,6 @@ int main()
 			}
 		}
 
-		// Draw sprite UV previews
-		//if (imageLoaded) {
-		//	for (int i = 0; i < sprites.size(); i++) {
-		//		for (int j = 0; j < sprites[i].frames.size(); j++) {
-		//			Rectangle r = ImageToScreenRect(sprites[i].frames[j].uv);
-
-		//			Color col = (i == selectedSprite && j == selectedFrame)
-		//				? YELLOW : Fade(RED, 0.7);
-
-		//			DrawRectangleLinesEx(r, 2, col);
-		//		}
-		//	}
-		//}
-
-		//// GUI panel
-		//GuiPanel({ 10, 10, 320, 380 }, "Sprites");
-
-		//// sprite animationNameOrPlaceholder field
-		//GuiTextBox({ 20, 50, 200, 25 }, spriteNameBuf, 64, true);
-
-		//if (GuiButton({ 230, 50, 80, 25 }, "Rename") && selectedSprite >= 0) {
-		//	sprites[selectedSprite].animationNameOrPlaceholder = spriteNameBuf;
-		//}
-
-		//// Sprite list
-		//for (int i = 0; i < sprites.size(); i++) {
-		//	if (GuiButton({ 20, 90.0f + i * 30.0f, 200, 25 }, sprites[i].animationNameOrPlaceholder.c_str())) {
-		//		selectedSprite = i;
-		//		selectedFrame = 0;
-		//	}
-		//}
-
-		// frames for the selected sprite
-		//if (selectedSprite >= 0) {
-		//	Sprite& s = sprites[selectedSprite];
-
-		//	GuiLabel({ 350, 10, 200, 20 }, ("Frames: " + s.animationNameOrPlaceholder).c_str());
-		//	for (int j = 0; j < s.frames.size(); j++) {
-		//		if (GuiButton({ 350, 40.0f + j * 30.0f, 150, 25 }, ("Frame " + std::to_string(j)).c_str())) {
-		//			selectedFrame = j;
-		//		}
-		//	}
-
-		//	if (GuiButton({ 350, 40.0f + static_cast<float>(s.frames.size()) * 30.0f, 150, 25 }, "Add Frame")) {
-		//		s.frames.push_back(s.frames.back());
-		//		selectedFrame = (int)s.frames.size() - 1;
-		//	}
-		//}
 #pragma region GUI
 
 		const char *animationNameOrPlaceholder{
@@ -978,9 +797,9 @@ int main()
 
 					// Reset view
 					{
-						pan = { 1, PAD * 2 + 30 };
+						view.pan = { 1, PAD * 2 + 30 };
 						//Set the zoom to fit the image on the max size
-						zoom = ZoomFitIntoRect(
+						view.zoom = ZoomFitIntoRect(
 							SpriteTexture->width,
 							SpriteTexture->height,
 							{ 0, 0,
@@ -988,7 +807,7 @@ int main()
 								  400.f,
 							  GetRenderHeight() -
 								  100.f });
-						fitZoom = zoom;
+						fitZoom = view.zoom;
 					}
 				}
 			}
@@ -1025,9 +844,9 @@ int main()
 						     30 };
 			if (GuiButton(fitViewRect, "Fit view")) {
 				// Reset view
-				pan = { 1, PAD * 2 + 30 };
+				view.pan = { 1, PAD * 2 + 30 };
 				//Set the zoom to fit the image on the max size
-				zoom = ZoomFitIntoRect(
+				view.zoom = ZoomFitIntoRect(
 					CANVAS_WIDTH, CANVAS_HEIGHT,
 					{ 0, 0, GetRenderWidth() - 400.f,
 					  GetRenderHeight() - 100.f });
