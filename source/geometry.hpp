@@ -26,6 +26,8 @@ SOFTWARE.
 
 #include "raylib.h"
 
+#include <cstdint>
+
 template <typename T> struct TVec2 {
 	T x{}, y{};
 };
@@ -42,12 +44,12 @@ using Rect = TRect<int32_t>;
 namespace to
 {
 
-Vector2 Vector2_(const Vec2 &vec)
+inline Vector2 Vector2_(const Vec2 &vec)
 {
 	return { static_cast<float>(vec.x), static_cast<float>(vec.y) };
 }
 
-Rectangle Rectangle_(const Rect &rect)
+inline Rectangle Rectangle_(const Rect &rect)
 {
 	return { static_cast<float>(rect.x), static_cast<float>(rect.y),
 		 static_cast<float>(rect.w), static_cast<float>(rect.h) };
@@ -57,14 +59,16 @@ Rectangle Rectangle_(const Rect &rect)
 
 namespace from
 {
-Vec2 Vector2_(const Vector2 &vec)
+
+inline Vec2 Vector2_(const Vector2 &vec)
 {
 	return { static_cast<int32_t>(vec.x), static_cast<int32_t>(vec.y) };
 }
 
-Rectangle Rectangle_(const Rect &rect)
+inline Rectangle Rectangle_(const Rect &rect)
 {
 	return { static_cast<float>(rect.x), static_cast<float>(rect.y),
 		 static_cast<float>(rect.w), static_cast<float>(rect.h) };
 }
+
 }

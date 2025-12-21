@@ -26,9 +26,59 @@ SOFTWARE.
 
 #include "raylib.h"
 
-#include <string>
+#include "geometry.hpp"
 
-class Project final {
+#include <cstdint>
+#include <string_view>
+#include <string>
+#include <variant>
+#include <vector>
+
+struct Property {
+	int32_t Value{};
+	bool ActiveBox{};
+};
+
+struct NamedProperty {
+	const std::string_view Name;
+	Property *const Prop;
+};
+
+struct SpritesheetUv {
+	Rect Uv{};
+
+	//Properties
+	Property Property_Rect[4]{};
+	Property Property_AnimTypeIndex{};
+	Property Property_NumOfFrames{ 1 };
+	Property Property_Columns{ std::numeric_limits<int32_t>::max() };
+	Property Property_FrameDurationMs{ 100 };
+	bool Looping{ true };
+
+#pragma region Internal data
+	Property CurrentFrameIndex{};
+	int64_t StartTimeMs{};
+
+	int32_t DraggingControlIndex{};
+	Vec2 DeltaMousePos{};
+#pragma endregion
+};
+
+struct KeyframeUv {
+	struct Keyframe {
+		Rectangle Uv{};
+		int32_t FrameDurationMs{ 100 };
+	};
+	std::vector<Keyframe> Keyframes{};
+};
+
+using AnimationVariant_T = std::variant<SpritesheetUv, KeyframeUv>;
+
+struct AnimationData {
+	AnimationVariant_T Data{ SpritesheetUv{} };
+};
+
+class Project {
     public:
 	bool SaveToFile(const std::string &filePath) const;
 	bool LoadFromFile(const std::string &filePath);

@@ -35,16 +35,14 @@ SOFTWARE.
 #include "project.hpp"
 #include "drawing.hpp"
 
-#include <nlohmann/json.hpp>
-
 #include <unordered_map>
 #include <fstream>
 #include <optional>
 #include <limits>
 #include <iostream>
 #include <variant>
-
-using json = nlohmann::json;
+#include <numeric>
+#include <cassert>
 
 /* Gui padding*/
 constexpr int32_t PAD{ 10 };
@@ -149,217 +147,182 @@ template <typename T> void RoundTo(T &value, int grid, bool round)
 
 #pragma endregion Helpers
 
-struct Property {
-	int32_t Value{};
-	bool ActiveBox{};
-};
+void DrawSpritesheetUvProperties(Rectangle rect, SpritesheetUv &p)
+{
+	rect.height = 30;
 
-struct NamedProperty {
-	const std::string_view Name;
-	Property *const Prop;
-};
-
-struct Properties {
-	virtual void DrawProperties(Rectangle rect) = 0;
-};
-
-struct SpritesheetUv : public Properties {
-	Rect Uv{};
-
-	//Properties
-	Property Rect[4]{};
-	Property AnimTypeIndex{};
-	Property NumOfFrames{ 1 };
-	Property Columns{ std::numeric_limits<int32_t>::max() };
-	Property FrameDurationMs{ 100 };
-	bool Looping{ true };
-
-	// Internal data
-	Property CurrentFrameIndex{};
-	int64_t StartTimeMs{};
-
-	int32_t DraggingControlIndex{};
-	Vec2 DeltaMousePos{};
-
-	void DrawProperties(Rectangle rect) override
+	// Draw UV Rect
 	{
-		rect.height = 30;
+		p.Property_Rect[0].Value = p.Uv.x;
+		(void)(NumericBox(rect, "X:", &p.Property_Rect[0].Value,
+				  -INT32_MAX, INT32_MAX,
+				  p.Property_Rect[0].ActiveBox));
+		p.Uv.x = static_cast<float>(p.Property_Rect[0].Value);
+		rect.y += 30 + PAD;
+		p.Property_Rect[1].Value = p.Uv.y;
+		(void)(NumericBox(rect, "Y:", &p.Property_Rect[1].Value,
+				  -INT32_MAX, INT32_MAX,
+				  p.Property_Rect[1].ActiveBox));
+		p.Uv.y = static_cast<float>(p.Property_Rect[1].Value);
+		rect.y += 30 + PAD;
+		p.Property_Rect[2].Value = p.Uv.w;
+		(void)(NumericBox(rect, "Width:", &p.Property_Rect[2].Value,
+				  -INT32_MAX, INT32_MAX,
+				  p.Property_Rect[2].ActiveBox));
+		p.Uv.w = static_cast<float>(p.Property_Rect[2].Value);
+		rect.y += 30 + PAD;
+		p.Property_Rect[3].Value = p.Uv.h;
+		(void)(NumericBox(rect, "Height:", &p.Property_Rect[3].Value,
+				  -INT32_MAX, INT32_MAX,
+				  p.Property_Rect[3].ActiveBox));
+		p.Uv.h = static_cast<float>(p.Property_Rect[3].Value);
+		rect.y += 30 + PAD;
+	}
 
-		// Draw UV Rect
+	// Num of frames
+	(void)(NumericBox(rect, "Frames:", &p.Property_NumOfFrames.Value, 1,
+			  8196, p.Property_NumOfFrames.ActiveBox));
+
+	rect.y += 30 + PAD;
+
+	// Wrap around
+	(void)(NumericBox(rect, "Columns:", &p.Property_Columns.Value, 1, 8196,
+			  p.Property_Columns.ActiveBox));
+	// Clamp to at least 1 column
+	p.Property_Columns.Value = std::max(p.Property_Columns.Value, 1);
+	rect.y += 30 + PAD;
+
+	// Frame duration
+	(void)(NumericBox(
+		rect, "Frame duration ms:", &p.Property_FrameDurationMs.Value,
+		0, INT32_MAX, p.Property_FrameDurationMs.ActiveBox));
+	rect.y += 30 + PAD;
+
+	if (SpriteTexture.has_value()) {
+		// Draw preview animation frame
+		const Rectangle previewRect{ rect.x, rect.y, rect.width,
+					     rect.width };
+
+		Rectangle spriteRect{ previewRect };
+		// Make the sprite rect fit inside preview rect maintaining aspect ratio
+		if (p.Uv.w > p.Uv.h) {
+			const auto spriteAspectRatio = p.Uv.h / (float)p.Uv.w;
+			spriteRect.width = previewRect.width;
+			spriteRect.height =
+				previewRect.width * spriteAspectRatio;
+		} else {
+			const auto spriteAspectRatio = p.Uv.w / (float)p.Uv.h;
+			spriteRect.height = previewRect.height;
+			spriteRect.width =
+				previewRect.height * spriteAspectRatio;
+		}
+		// Center the sprite
 		{
-			Rect[0].Value = Uv.x;
-			(void)(NumericBox(rect, "X:", &Rect[0].Value,
-					  -INT32_MAX, INT32_MAX,
-					  Rect[0].ActiveBox));
-			Uv.x = static_cast<float>(Rect[0].Value);
-			rect.y += 30 + PAD;
-			Rect[1].Value = Uv.y;
-			(void)(NumericBox(rect, "Y:", &Rect[1].Value,
-					  -INT32_MAX, INT32_MAX,
-					  Rect[1].ActiveBox));
-			Uv.y = static_cast<float>(Rect[1].Value);
-			rect.y += 30 + PAD;
-			Rect[2].Value = Uv.w;
-			(void)(NumericBox(rect, "Width:", &Rect[2].Value,
-					  -INT32_MAX, INT32_MAX,
-					  Rect[2].ActiveBox));
-			Uv.w = static_cast<float>(Rect[2].Value);
-			rect.y += 30 + PAD;
-			Rect[3].Value = Uv.h;
-			(void)(NumericBox(rect, "Height:", &Rect[3].Value,
-					  -INT32_MAX, INT32_MAX,
-					  Rect[3].ActiveBox));
-			Uv.h = static_cast<float>(Rect[3].Value);
-			rect.y += 30 + PAD;
+			spriteRect.x +=
+				(previewRect.width - spriteRect.width) * .5f;
+			spriteRect.y +=
+				(previewRect.height - spriteRect.height) * .5f;
 		}
 
-		// Num of frames
-		(void)(NumericBox(rect, "Frames:", &NumOfFrames.Value, 1, 8196,
-				  NumOfFrames.ActiveBox));
+		// Draw preview background
+		DrawRectangleRec(previewRect, WHITE);
 
-		rect.y += 30 + PAD;
+		const Vector2 uvOffset{
+			(p.CurrentFrameIndex.Value % p.Property_Columns.Value) *
+				p.Uv.w,
+			(p.CurrentFrameIndex.Value / p.Property_Columns.Value) *
+				p.Uv.h
+		};
 
-		// Wrap around
-		(void)(NumericBox(rect, "Columns:", &Columns.Value, 1, 8196,
-				  Columns.ActiveBox));
-		// Clamp to at least 1 column
-		Columns.Value = std::max(Columns.Value, 1);
-		rect.y += 30 + PAD;
+		const Vector2 uvTopLeft{ p.Uv.x + uvOffset.x,
+					 p.Uv.y + uvOffset.y };
 
-		// Frame duration
-		(void)(NumericBox(rect,
-				  "Frame duration ms:", &FrameDurationMs.Value,
-				  0, INT32_MAX, FrameDurationMs.ActiveBox));
-		rect.y += 30 + PAD;
+		const Vector2 uvBottomRight{ uvTopLeft.x + p.Uv.w,
+					     uvTopLeft.y + p.Uv.h };
 
-		if (SpriteTexture.has_value()) {
-			// Draw preview animation frame
-			const Rectangle previewRect{ rect.x, rect.y, rect.width,
-						     rect.width };
+		// Draw the UV rect
+		rlSetTexture(SpriteTexture->id);
+		rlBegin(RL_QUADS);
 
-			Rectangle spriteRect{ previewRect };
-			// Make the sprite rect fit inside preview rect maintaining aspect ratio
-			if (Uv.w > Uv.h) {
-				const auto spriteAspectRatio =
-					Uv.h / (float)Uv.w;
-				spriteRect.width = previewRect.width;
-				spriteRect.height =
-					previewRect.width * spriteAspectRatio;
-			} else {
-				const auto spriteAspectRatio =
-					Uv.w / (float)Uv.h;
-				spriteRect.height = previewRect.height;
-				spriteRect.width =
-					previewRect.height * spriteAspectRatio;
+		rlTexCoord2f(uvTopLeft.x / SpriteTexture->width,
+			     uvTopLeft.y / SpriteTexture->height);
+		rlVertex2f(spriteRect.x, spriteRect.y);
+
+		rlTexCoord2f(uvTopLeft.x / SpriteTexture->width,
+			     uvBottomRight.y / SpriteTexture->height);
+		rlVertex2f(spriteRect.x, spriteRect.y + spriteRect.height);
+
+		rlTexCoord2f(uvBottomRight.x / SpriteTexture->width,
+			     uvBottomRight.y / SpriteTexture->height);
+		rlVertex2f(spriteRect.x + spriteRect.width,
+			   spriteRect.y + spriteRect.height);
+
+		rlTexCoord2f(uvBottomRight.x / SpriteTexture->width,
+			     uvTopLeft.y / SpriteTexture->height);
+		rlVertex2f(spriteRect.x + spriteRect.width, spriteRect.y);
+
+		rlEnd();
+		rlSetTexture(0);
+	}
+
+	{
+		// Advance animation frame
+		const int64_t currentTimeMs = (int64_t)(GetTime() * 1000.0);
+		;
+		if (p.Property_FrameDurationMs.Value > 0 &&
+		    p.Property_NumOfFrames.Value > 1) {
+			if (p.StartTimeMs == 0) {
+				p.StartTimeMs = currentTimeMs;
 			}
-			// Center the sprite
-			{
-				spriteRect.x +=
-					(previewRect.width - spriteRect.width) *
-					.5f;
-				spriteRect.y += (previewRect.height -
-						 spriteRect.height) *
-						.5f;
-			}
-
-			// Draw preview background
-			DrawRectangleRec(previewRect, WHITE);
-
-			const Vector2 uvOffset{
-				(CurrentFrameIndex.Value % Columns.Value) *
-					Uv.w,
-				(CurrentFrameIndex.Value / Columns.Value) * Uv.h
-			};
-
-			const Vector2 uvTopLeft{ Uv.x + uvOffset.x,
-						 Uv.y + uvOffset.y };
-
-			const Vector2 uvBottomRight{ uvTopLeft.x + Uv.w,
-						     uvTopLeft.y + Uv.h };
-
-			// Draw the UV rect
-			rlSetTexture(SpriteTexture->id);
-			rlBegin(RL_QUADS);
-
-			rlTexCoord2f(uvTopLeft.x / SpriteTexture->width,
-				     uvTopLeft.y / SpriteTexture->height);
-			rlVertex2f(spriteRect.x, spriteRect.y);
-
-			rlTexCoord2f(uvTopLeft.x / SpriteTexture->width,
-				     uvBottomRight.y / SpriteTexture->height);
-			rlVertex2f(spriteRect.x,
-				   spriteRect.y + spriteRect.height);
-
-			rlTexCoord2f(uvBottomRight.x / SpriteTexture->width,
-				     uvBottomRight.y / SpriteTexture->height);
-			rlVertex2f(spriteRect.x + spriteRect.width,
-				   spriteRect.y + spriteRect.height);
-
-			rlTexCoord2f(uvBottomRight.x / SpriteTexture->width,
-				     uvTopLeft.y / SpriteTexture->height);
-			rlVertex2f(spriteRect.x + spriteRect.width,
-				   spriteRect.y);
-
-			rlEnd();
-			rlSetTexture(0);
-		}
-
-		{
-			// Advance animation frame
-			const int64_t currentTimeMs =
-				(int64_t)(GetTime() * 1000.0);
-			;
-			if (FrameDurationMs.Value > 0 &&
-			    NumOfFrames.Value > 1) {
-				if (StartTimeMs == 0) {
-					StartTimeMs = currentTimeMs;
-				}
-				const int64_t elapsedMs =
-					currentTimeMs - StartTimeMs;
-				const int32_t frameAdvances =
-					static_cast<int32_t>(
-						elapsedMs /
-						FrameDurationMs.Value);
-				if (frameAdvances > 0) {
-					CurrentFrameIndex.Value +=
-						frameAdvances;
-					if (Looping) {
-						CurrentFrameIndex.Value %=
-							NumOfFrames.Value;
-					} else {
-						if (CurrentFrameIndex.Value >=
-						    NumOfFrames.Value) {
-							CurrentFrameIndex.Value =
-								NumOfFrames
-									.Value -
-								1;
-						}
+			const int64_t elapsedMs = currentTimeMs - p.StartTimeMs;
+			const int32_t frameAdvances = static_cast<int32_t>(
+				elapsedMs / p.Property_FrameDurationMs.Value);
+			if (frameAdvances > 0) {
+				p.CurrentFrameIndex.Value += frameAdvances;
+				if (p.Looping) {
+					p.CurrentFrameIndex.Value %=
+						p.Property_NumOfFrames.Value;
+				} else {
+					if (p.CurrentFrameIndex.Value >=
+					    p.Property_NumOfFrames.Value) {
+						p.CurrentFrameIndex.Value =
+							p.Property_NumOfFrames
+								.Value -
+							1;
 					}
-					StartTimeMs += frameAdvances *
-						       FrameDurationMs.Value;
 				}
+				p.StartTimeMs +=
+					frameAdvances *
+					p.Property_FrameDurationMs.Value;
 			}
 		}
 	}
-};
+}
 
-struct KeyframeUv : public Properties {
-	struct Keyframe {
-		Rectangle Uv{};
-		int32_t FrameDurationMs{ 100 };
-	};
-	std::vector<Keyframe> Keyframes{};
+void DrawKeyframeProperties(Rectangle rect, KeyframeUv &p)
+{
+	// Draw UV Rect
+	constexpr std::string_view err{ "KEYFRAME not Supported yet!" };
+	DrawText(err.data(),
+		 rect.x + rect.width / 2.f - GetTextWidth(err.data()) / 2.f,
+		 rect.y, GuiGetStyle(DEFAULT, TEXT_SIZE), RED);
+}
 
-	void DrawProperties(Rectangle rect) override
-	{
-		// Draw UV Rect
-		constexpr std::string_view err{ "KEYFRAME not Supported yet!" };
-		DrawText(err.data(),
-			 rect.x + rect.width / 2.f -
-				 GetTextWidth(err.data()) / 2.f,
-			 rect.y, GuiGetStyle(DEFAULT, TEXT_SIZE), RED);
+void DrawPropertiesIfValidPtr(Rectangle rect, AnimationData *p)
+{
+	if (!p) {
+		return;
 	}
-};
+
+	if (std::holds_alternative<SpritesheetUv>(p->Data)) {
+		DrawSpritesheetUvProperties(rect,
+					    std::get<SpritesheetUv>(p->Data));
+	} else if (std::holds_alternative<KeyframeUv>(p->Data)) {
+		DrawKeyframeProperties(rect, std::get<KeyframeUv>(p->Data));
+	} else {
+		assert(false && "Unknown property variant!");
+	}
+}
 
 EModalType ActiveModal{ EModalType::NONE };
 View view{};
@@ -377,13 +340,12 @@ ListSelection ListState{};
 Rectangle panelView = { 0 };
 Vector2 panelScroll = { 0, 0 };
 
-Properties *PropertyPanel{};
+AnimationData *PropertyPanel{};
 
 using ANIMATION_NAME_T = char[32 + 1];
 ANIMATION_NAME_T NewAnimationName{ "Animation_0" };
 bool NewAnimationEditMode{ false };
-std::unordered_map<std::string, std::variant<SpritesheetUv, KeyframeUv> >
-	AnimationNameToSpritesheet{};
+std::unordered_map<std::string, AnimationData> AnimationNameToSpritesheet{};
 std::vector<const char *> ImmutableTransientAnimationNames{};
 
 void RebuildAnimationNamesVector()
@@ -414,29 +376,6 @@ Rectangle ImageToScreenRect(const Rectangle &r)
 		 view.pan.y + r.y * SpriteTexture->height * view.zoom,
 		 r.width * SpriteTexture->width * view.zoom,
 		 r.height * SpriteTexture->height * view.zoom };
-}
-
-void ExportMetadata(const std::string &imagePath)
-{
-	json root;
-
-	//for (const auto& s : sprites) {
-	//    json arr = json::array();
-	//    for (const auto& f : s.frames) {
-	//        arr.push_back({
-	//            {"x", f.uv.x},
-	//            {"y", f.uv.y},
-	//            {"w", f.uv.width},
-	//            {"h", f.uv.height}
-	//        });
-	//    }
-	//    root[s.animationNameOrPlaceholder] = arr;
-	//}
-
-	//// produce <image>.json
-	//std::string out = imagePath.substr(0, imagePath.find_last_of(".")) + ".json";
-	//std::ofstream of(out);
-	//of << root.dump(4);
 }
 
 int main()
@@ -580,48 +519,39 @@ int main()
 
 		// Draw the selected animation
 		if (hasValidSelectedAnimation) {
-			PropertyPanel =
-				AnimationNameToSpritesheet
-							.at(ImmutableTransientAnimationNames
-								    [ListState.activeIndex])
-							.index() == 0 ?
-					reinterpret_cast<
-						Properties *>(&std::get<
-							      SpritesheetUv>(
-						AnimationNameToSpritesheet.at(
-							ImmutableTransientAnimationNames
-								[ListState
-									 .activeIndex]))) :
-					reinterpret_cast<
-						Properties *>(&std::get<
-							      KeyframeUv>(
-						AnimationNameToSpritesheet.at(
-							ImmutableTransientAnimationNames
-								[ListState
-									 .activeIndex])));
+			//if (AnimationNameToSpritesheet.at(
+			//	    ImmutableTransientAnimationNames
+			//		    [ListState.activeIndex])))
+			PropertyPanel = nullptr;
+			PropertyPanel = &AnimationNameToSpritesheet.at(
+				ImmutableTransientAnimationNames
+					[ListState.activeIndex]);
 
 			auto &animationVariant = AnimationNameToSpritesheet.at(
 				ImmutableTransientAnimationNames
 					[ListState.activeIndex]);
 			if (std::holds_alternative<SpritesheetUv>(
-				    animationVariant)) {
+				    animationVariant.Data)) {
 				auto &spriteSheet = std::get<SpritesheetUv>(
-					animationVariant);
+					animationVariant.Data);
 
 				DrawUVRectDashed(to::Rectangle_(spriteSheet.Uv),
 						 view);
 
 				for (int32_t i{ 1 };
-				     i < spriteSheet.NumOfFrames.Value; ++i) {
+				     i < spriteSheet.Property_NumOfFrames.Value;
+				     ++i) {
 					Rectangle frameUv{ to::Rectangle_(
 						spriteSheet.Uv) };
 					frameUv.x +=
 						(i %
-						 spriteSheet.Columns.Value) *
+						 spriteSheet.Property_Columns
+							 .Value) *
 						frameUv.width;
 					frameUv.y +=
 						(i /
-						 spriteSheet.Columns.Value) *
+						 spriteSheet.Property_Columns
+							 .Value) *
 						frameUv.height;
 					DrawUVRectDashed(frameUv, view);
 				}
@@ -975,10 +905,13 @@ int main()
 			RIGHTPANEL_Y += 30 + PAD;
 			// Draw properties only if selected
 			if (hasValidSelectedAnimation) {
-				PropertyPanel->DrawProperties(
-					{ RIGHTPANEL_X + PAD, RIGHTPANEL_Y,
-					  RIGHTPANEL_W - PAD * 2.f,
-					  GetRenderHeight() - RIGHTPANEL_Y });
+				DrawPropertiesIfValidPtr(
+					Rectangle{ RIGHTPANEL_X + PAD,
+						   RIGHTPANEL_Y,
+						   RIGHTPANEL_W - PAD * 2.f,
+						   GetRenderHeight() -
+							   RIGHTPANEL_Y },
+					PropertyPanel);
 			}
 		}
 
@@ -1000,12 +933,6 @@ int main()
 				      GetRenderWidth(), 16, DARKGRAY);
 			DrawText(app.ImagePath.c_str(), 10,
 				 GetRenderHeight() - 16, 16, WHITE);
-		}
-
-		// Export button
-		if (SpriteTexture.has_value() &&
-		    GuiButton({ 20, 350, 200, 30 }, "Export JSON")) {
-			ExportMetadata("spritesheet.png");
 		}
 
 		// Unlock gui
@@ -1065,9 +992,12 @@ int main()
 					SpritesheetUv spriteSheet{};
 					spriteSheet.Uv = { 0, 0, app.GridSize,
 							   app.GridSize };
+
+					AnimationData animData{ std::move(
+						spriteSheet) };
 					AnimationNameToSpritesheet.emplace(
 						std::string(NewAnimationName),
-						std::move(spriteSheet));
+						std::move(animData));
 					ListState.activeIndex =
 						AnimationNameToSpritesheet
 							.size() -
