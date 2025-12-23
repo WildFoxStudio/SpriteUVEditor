@@ -77,6 +77,7 @@ bool Project::LoadFromFile(const std::string &filePath)
 	const auto loadError{ LoadSpriteTexture(filePath, loadedTexture) };
 	if (!loadError.has_value()) {
 		texture = std::move(loadedTexture.value());
+		spritePath = filePath;
 		return true;
 	}
 

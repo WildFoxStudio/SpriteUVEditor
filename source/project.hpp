@@ -33,6 +33,7 @@ SOFTWARE.
 #include <string>
 #include <variant>
 #include <vector>
+#include <map>
 
 struct Property {
 	int32_t Value{};
@@ -83,8 +84,21 @@ class Project {
 	bool SaveToFile(const std::string &filePath) const;
 	bool LoadFromFile(const std::string &filePath);
 
+	std::vector<const char *> ImmutableTransientAnimationNames{};
+	void RebuildAnimationNamesVector()
+	{
+		ImmutableTransientAnimationNames.clear();
+		ImmutableTransientAnimationNames.reserve(
+			AnimationNameToSpritesheet.size());
+		for (const auto &[name, spriteSheet] :
+		     AnimationNameToSpritesheet) {
+			ImmutableTransientAnimationNames.push_back(name.data());
+		}
+	}
+
     private:
 	Project(Texture2D sprite);
-
+	std::string spritePath{};
 	Texture2D texture{};
+	std::map<std::string, AnimationData> AnimationNameToSpritesheet{};
 };
