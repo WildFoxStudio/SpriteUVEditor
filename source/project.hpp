@@ -29,78 +29,84 @@ SOFTWARE.
 #include "geometry.hpp"
 
 #include <cstdint>
-#include <string_view>
-#include <string>
-#include <variant>
-#include <vector>
 #include <map>
 #include <optional>
+#include <string>
+#include <string_view>
+#include <variant>
+#include <vector>
 
-struct Property {
-	int32_t Value{};
-	bool ActiveBox{};
+struct Property
+{
+    int32_t Value{};
+    bool    ActiveBox{};
 };
 
-struct NamedProperty {
-	const std::string_view Name;
-	Property *const Prop;
+struct NamedProperty
+{
+    const std::string_view Name;
+    Property* const        Prop;
 };
 
-struct SpritesheetUv {
-	Rect Uv{};
+struct SpritesheetUv
+{
+    Rect Uv{};
 
-	//Properties
-	Property Property_Rect[4]{};
-	Property Property_AnimTypeIndex{};
-	Property Property_NumOfFrames{ 1 };
-	Property Property_Columns{ std::numeric_limits<int32_t>::max() };
-	Property Property_FrameDurationMs{ 100 };
-	bool Looping{ true };
+    // Properties
+    Property Property_Rect[4]{};
+    Property Property_AnimTypeIndex{};
+    Property Property_NumOfFrames{ 1 };
+    Property Property_Columns{ std::numeric_limits<int32_t>::max() };
+    Property Property_FrameDurationMs{ 100 };
+    bool     Looping{ true };
 
 #pragma region Internal data
-	Property CurrentFrameIndex{};
-	int64_t StartTimeMs{};
+    Property CurrentFrameIndex{};
+    int64_t  StartTimeMs{};
 
-	int32_t DraggingControlIndex{};
-	Vec2 DeltaMousePos{};
+    int32_t DraggingControlIndex{};
+    Vec2    DeltaMousePos{};
 #pragma endregion
 };
 
-struct KeyframeUv {
-	struct Keyframe {
-		Rectangle Uv{};
-		int32_t FrameDurationMs{ 100 };
-	};
-	std::vector<Keyframe> Keyframes{};
+struct KeyframeUv
+{
+    struct Keyframe
+    {
+        Rectangle Uv{};
+        int32_t   FrameDurationMs{ 100 };
+    };
+    std::vector<Keyframe> Keyframes{};
 };
 
 using AnimationVariant_T = std::variant<SpritesheetUv, KeyframeUv>;
 
-struct AnimationData {
-	AnimationVariant_T Data{ SpritesheetUv{} };
+struct AnimationData
+{
+    AnimationVariant_T Data{ SpritesheetUv{} };
 };
 
-class Project {
-    public:
-	Project() = default;
-	Project(Texture2D sprite, const std::string &filePath);
-	bool SaveToFile() const;
-	bool LoadFromFile(const std::string &filePath);
+class Project
+{
+  public:
+    Project() = default;
+    Project(Texture2D sprite, const std::string& filePath);
+    bool SaveToFile() const;
+    bool LoadFromFile(const std::string& filePath);
 
-	std::vector<const char *> ImmutableTransientAnimationNames{};
-	void RebuildAnimationNamesVector()
-	{
-		ImmutableTransientAnimationNames.clear();
-		ImmutableTransientAnimationNames.reserve(
-			AnimationNameToSpritesheet.size());
-		for (const auto &[name, spriteSheet] :
-		     AnimationNameToSpritesheet) {
-			ImmutableTransientAnimationNames.push_back(name.data());
-		}
-	}
-	std::string SpritePath{};
-	std::optional<Texture2D> SpriteTexture{};
-	std::map<std::string, AnimationData> AnimationNameToSpritesheet{};
+    std::vector<const char*> ImmutableTransientAnimationNames{};
+    void                     RebuildAnimationNamesVector()
+    {
+        ImmutableTransientAnimationNames.clear();
+        ImmutableTransientAnimationNames.reserve(AnimationNameToSpritesheet.size());
+        for (const auto& [name, spriteSheet] : AnimationNameToSpritesheet)
+            {
+                ImmutableTransientAnimationNames.push_back(name.data());
+            }
+    }
+    std::string                          SpritePath{};
+    std::optional<Texture2D>             SpriteTexture{};
+    std::map<std::string, AnimationData> AnimationNameToSpritesheet{};
 
-	bool HasUnsavedChanges();
+    bool HasUnsavedChanges();
 };

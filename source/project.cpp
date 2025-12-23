@@ -25,87 +25,93 @@ SOFTWARE.
 
 #include <nlohmann/json.hpp>
 
-#include <optional>
 #include <cassert>
 #include <fstream>
+#include <optional>
 
 namespace
 {
 std::optional<std::string>
-LoadSpriteTexture(const std::string &imagePath,
-		  std::optional<Texture2D> &outTexture)
+LoadSpriteTexture(const std::string& imagePath, std::optional<Texture2D>& outTexture)
 {
-	Image loadedImg = LoadImage(imagePath.c_str());
-	// Failed to open the image!
-	if (loadedImg.data == nullptr) {
-		return "Failed to open the image!";
-	}
+    Image loadedImg = LoadImage(imagePath.c_str());
+    // Failed to open the image!
+    if (loadedImg.data == nullptr)
+        {
+            return "Failed to open the image!";
+        }
 
-	Texture2D newTexture = LoadTextureFromImage(loadedImg);
-	UnloadImage(loadedImg);
+    Texture2D newTexture = LoadTextureFromImage(loadedImg);
+    UnloadImage(loadedImg);
 
-	// Failed to allocate the sprite GPU texture!
-	if (newTexture.id == 0) {
-		return "Failed to allocate the sprite GPU texture!";
-	}
+    // Failed to allocate the sprite GPU texture!
+    if (newTexture.id == 0)
+        {
+            return "Failed to allocate the sprite GPU texture!";
+        }
 
-	// Unload and replace
-	if (outTexture.has_value()) {
-		UnloadTexture(outTexture.value());
-	}
-	outTexture.emplace(std::move(newTexture));
+    // Unload and replace
+    if (outTexture.has_value())
+        {
+            UnloadTexture(outTexture.value());
+        }
+    outTexture.emplace(std::move(newTexture));
 
-	// No error
-	return {};
+    // No error
+    return {};
 }
 };
 
-bool Project::SaveToFile() const
+bool
+Project::SaveToFile() const
 {
-	if (SpritePath.empty())
-		return false;
+    if (SpritePath.empty())
+        return false;
 
-	assert(SpriteTexture.has_value()); // Should have a texture loaded
-	assert(false); // Not implemented yet
-	return false;
+    assert(SpriteTexture.has_value()); // Should have a texture loaded
+    assert(false); // Not implemented yet
+    return false;
 }
 
-bool Project::LoadFromFile(const std::string &filePath)
+bool
+Project::LoadFromFile(const std::string& filePath)
 {
-	assert(!filePath.empty());
-	assert(!SpriteTexture
-			.has_value()); // Should not have a texture already loaded
+    assert(!filePath.empty());
+    assert(!SpriteTexture.has_value()); // Should not have a texture already loaded
 
-	std::optional<Texture2D> loadedTexture{};
-	const auto loadError{ LoadSpriteTexture(filePath, loadedTexture) };
-	if (!loadError.has_value()) {
-		SpriteTexture = std::move(loadedTexture.value());
-		SpritePath = filePath;
-		return true;
-	}
+    std::optional<Texture2D> loadedTexture{};
+    const auto               loadError{ LoadSpriteTexture(filePath, loadedTexture) };
+    if (!loadError.has_value())
+        {
+            SpriteTexture = std::move(loadedTexture.value());
+            SpritePath    = filePath;
+            return true;
+        }
 
-	// Try to load the equivalent json with the same name
-	nlohmann::json j{};
-	try {
-		std::ifstream fileStream{ filePath };
-		fileStream >> j;
-	} catch (const std::exception &e) {
-		// Failed to open the file, who cares it might not exist yet.
-	}
+    // Try to load the equivalent json with the same name
+    nlohmann::json j{};
+    try
+        {
+            std::ifstream fileStream{ filePath };
+            fileStream >> j;
+        }
+    catch (const std::exception& e)
+        {
+            // Failed to open the file, who cares it might not exist yet.
+        }
 
-	return SpriteTexture.has_value();
+    return SpriteTexture.has_value();
 }
 
-bool Project::HasUnsavedChanges()
+bool
+Project::HasUnsavedChanges()
 {
-	// Compare latest json vs previous json
-	return true;
+    // Compare latest json vs previous json
+    return true;
 }
 
-Project::Project(Texture2D sprite, const std::string &filePath)
-	: SpritePath{ filePath }
-	, SpriteTexture{ sprite }
+Project::Project(Texture2D sprite, const std::string& filePath) : SpritePath{ filePath }, SpriteTexture{ sprite }
 {
-	assert(!filePath.empty());
-	assert(sprite.id > 0);
+    assert(!filePath.empty());
+    assert(sprite.id > 0);
 }

@@ -30,115 +30,108 @@ SOFTWARE.
 
 #include <cmath>
 
-void DrawDashedLine(Vector2 start, Vector2 end, float dashLength,
-		    float gapLength, float thickness, Color color)
+void
+DrawDashedLine(Vector2 start, Vector2 end, float dashLength, float gapLength, float thickness, Color color)
 {
-	float dx = end.x - start.x;
-	float dy = end.y - start.y;
-	float length = sqrtf(dx * dx + dy * dy);
+    float dx     = end.x - start.x;
+    float dy     = end.y - start.y;
+    float length = sqrtf(dx * dx + dy * dy);
 
-	float dirX = dx / length;
-	float dirY = dy / length;
+    float dirX = dx / length;
+    float dirY = dy / length;
 
-	float drawn = 0.0f;
-	while (drawn < length) {
-		float segment = fminf(dashLength, length - drawn);
+    float drawn = 0.0f;
+    while (drawn < length)
+        {
+            float segment = fminf(dashLength, length - drawn);
 
-		Vector2 a = { start.x + dirX * drawn, start.y + dirY * drawn };
-		Vector2 b = { start.x + dirX * (drawn + segment),
-			      start.y + dirY * (drawn + segment) };
+            Vector2 a = { start.x + dirX * drawn, start.y + dirY * drawn };
+            Vector2 b = { start.x + dirX * (drawn + segment), start.y + dirY * (drawn + segment) };
 
-		DrawLineEx(a, b, thickness, color);
+            DrawLineEx(a, b, thickness, color);
 
-		drawn += dashLength + gapLength;
-	}
+            drawn += dashLength + gapLength;
+        }
 }
 
-void DrawUVRectDashed(Rectangle rect, View view)
+void
+DrawUVRectDashed(Rectangle rect, View view)
 {
-	constexpr Color dashColor{ DARKBLUE };
-	rect = view.TransformRect(rect);
+    constexpr Color dashColor{ DARKBLUE };
+    rect = view.TransformRect(rect);
 
-	constexpr float baseThickness{ 1.8f };
-	constexpr float dashLen{ 10 * baseThickness };
-	constexpr float dashGap{ 2 * baseThickness };
-	const auto thickness{ baseThickness * view.fitZoom };
+    constexpr float baseThickness{ 1.8f };
+    constexpr float dashLen{ 10 * baseThickness };
+    constexpr float dashGap{ 2 * baseThickness };
+    const auto      thickness{ baseThickness * view.fitZoom };
 
-	//DrawRectangleLinesEx(rect, 1.f, BLACK);
-	DrawDashedLine({ rect.x, rect.y }, { rect.x + rect.width, rect.y },
-		       dashLen, dashGap, thickness, dashColor);
-	DrawDashedLine({ rect.x, rect.y + rect.height },
-		       { rect.x + rect.width, rect.y + rect.height }, dashLen,
-		       dashGap, thickness, dashColor);
+    // DrawRectangleLinesEx(rect, 1.f, BLACK);
+    DrawDashedLine({ rect.x, rect.y }, { rect.x + rect.width, rect.y }, dashLen, dashGap, thickness, dashColor);
+    DrawDashedLine({ rect.x, rect.y + rect.height }, { rect.x + rect.width, rect.y + rect.height }, dashLen, dashGap, thickness, dashColor);
 
-	DrawDashedLine({ rect.x, rect.y }, { rect.x, rect.y + rect.height },
-		       dashLen, dashGap, thickness, dashColor);
-	DrawDashedLine({ rect.x + rect.width, rect.y },
-		       { rect.x + rect.width, rect.y + rect.height }, dashLen,
-		       dashGap, thickness, dashColor);
+    DrawDashedLine({ rect.x, rect.y }, { rect.x, rect.y + rect.height }, dashLen, dashGap, thickness, dashColor);
+    DrawDashedLine({ rect.x + rect.width, rect.y }, { rect.x + rect.width, rect.y + rect.height }, dashLen, dashGap, thickness, dashColor);
 }
 
-bool DrawControl(Vector2 origin, float controlExtent, Color baseColor)
+bool
+DrawControl(Vector2 origin, float controlExtent, Color baseColor)
 {
-	constexpr Color focusedColor{ BLUE };
-	const Rectangle cRect{ origin.x - controlExtent,
-			       origin.y - controlExtent, controlExtent * 2.f,
-			       controlExtent * 2.f };
+    constexpr Color focusedColor{ BLUE };
+    const Rectangle cRect{ origin.x - controlExtent, origin.y - controlExtent, controlExtent * 2.f, controlExtent * 2.f };
 
-	const bool mouseHover =
-		CheckCollisionPointRec(GetMousePosition(), cRect);
+    const bool mouseHover = CheckCollisionPointRec(GetMousePosition(), cRect);
 
-	DrawRectangleRec(cRect, mouseHover ? focusedColor : baseColor);
+    DrawRectangleRec(cRect, mouseHover ? focusedColor : baseColor);
 
-	return mouseHover;
+    return mouseHover;
 }
 
-int32_t DrawUvRectControlsGetControlIndex(Rectangle rect, View view,
-					  float controlExtent)
+int32_t
+DrawUvRectControlsGetControlIndex(Rectangle rect, View view, float controlExtent)
 {
-	constexpr Color controlColor{ DARKBLUE };
+    constexpr Color controlColor{ DARKBLUE };
 
-	rect = view.TransformRect(rect);
+    rect = view.TransformRect(rect);
 
-	int32_t index{ EControlIndex::NONE };
-	if (DrawControl({ rect.x + rect.width * .5f, rect.y }, controlExtent,
-			controlColor)) {
-		index = { EControlIndex::TOP };
-	}
-	if (DrawControl({ rect.x, rect.y }, controlExtent, controlColor)) {
-		index = { EControlIndex::TOP | EControlIndex::LEFT };
-	}
-	if (DrawControl({ rect.x + rect.width, rect.y }, controlExtent,
-			controlColor)) {
-		index = { EControlIndex::TOP | EControlIndex::RIGHT };
-	}
-	if (DrawControl({ rect.x + rect.width * .5f, rect.y + rect.height },
-			controlExtent, controlColor)) {
-		index = { EControlIndex::BOTTOM };
-	}
-	if (DrawControl({ rect.x, rect.y + rect.height * .5f }, controlExtent,
-			controlColor)) {
-		index = { EControlIndex::LEFT };
-	}
-	if (DrawControl({ rect.x, rect.y + rect.height }, controlExtent,
-			controlColor)) {
-		index = { EControlIndex::BOTTOM | EControlIndex::LEFT };
-	}
-	if (DrawControl({ rect.x + rect.width, rect.y + rect.height * .5f },
-			controlExtent, controlColor)) {
-		index = { EControlIndex::RIGHT };
-	}
-	if (DrawControl({ rect.x + rect.width, rect.y + rect.height },
-			controlExtent, controlColor)) {
-		index = { EControlIndex::BOTTOM | EControlIndex::RIGHT };
-	}
-	Color centerColor{ WHITE };
-	centerColor.a = 60;
-	if (DrawControl({ rect.x + rect.width * .5f,
-			  rect.y + rect.height * .5f },
-			controlExtent * 2, WHITE)) {
-		index = { EControlIndex::CENTER };
-	}
+    int32_t index{ EControlIndex::NONE };
+    if (DrawControl({ rect.x + rect.width * .5f, rect.y }, controlExtent, controlColor))
+        {
+            index = { EControlIndex::TOP };
+        }
+    if (DrawControl({ rect.x, rect.y }, controlExtent, controlColor))
+        {
+            index = { EControlIndex::TOP | EControlIndex::LEFT };
+        }
+    if (DrawControl({ rect.x + rect.width, rect.y }, controlExtent, controlColor))
+        {
+            index = { EControlIndex::TOP | EControlIndex::RIGHT };
+        }
+    if (DrawControl({ rect.x + rect.width * .5f, rect.y + rect.height }, controlExtent, controlColor))
+        {
+            index = { EControlIndex::BOTTOM };
+        }
+    if (DrawControl({ rect.x, rect.y + rect.height * .5f }, controlExtent, controlColor))
+        {
+            index = { EControlIndex::LEFT };
+        }
+    if (DrawControl({ rect.x, rect.y + rect.height }, controlExtent, controlColor))
+        {
+            index = { EControlIndex::BOTTOM | EControlIndex::LEFT };
+        }
+    if (DrawControl({ rect.x + rect.width, rect.y + rect.height * .5f }, controlExtent, controlColor))
+        {
+            index = { EControlIndex::RIGHT };
+        }
+    if (DrawControl({ rect.x + rect.width, rect.y + rect.height }, controlExtent, controlColor))
+        {
+            index = { EControlIndex::BOTTOM | EControlIndex::RIGHT };
+        }
+    Color centerColor{ WHITE };
+    centerColor.a = 60;
+    if (DrawControl({ rect.x + rect.width * .5f, rect.y + rect.height * .5f }, controlExtent * 2, WHITE))
+        {
+            index = { EControlIndex::CENTER };
+        }
 
-	return index;
+    return index;
 }

@@ -24,35 +24,32 @@ SOFTWARE.
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
-#include <algorithm>
-#include <optional>
 
 #include "raylib.h"
 
-class App final {
-    public:
-	int32_t GridSize{ 64 };
-	bool GridSizeInputActive{}; // Gui box active state
-	bool DrawGrid{ true };
-	bool SnapToGrid{ true };
-	std::string ImagePath{};
-	std::optional<std::string> LastError{};
+class App final
+{
+  public:
+    int32_t                    GridSize{ 64 };
+    bool                       GridSizeInputActive{}; // Gui box active state
+    bool                       DrawGrid{ true };
+    bool                       SnapToGrid{ true };
+    std::string                ImagePath{};
+    std::optional<std::string> LastError{};
 
-	App(int32_t width, int32_t height, const char *title);
-	~App();
-	bool ShouldRun() const;
+    App(int32_t width, int32_t height, const char* title);
+    ~App();
+    bool ShouldRun() const;
 
-	Font GetFont() const
-	{
-		return fontRoboto;
-	}
+    Font GetFont() const { return fontRoboto; }
 
-	bool OpenFileDialog(std::string &filePath,
-			    const std::vector<std::string> &extension) const;
+    bool OpenFileDialog(std::string& filePath, const std::vector<std::string>& extension) const;
 
-    private:
-	Font fontRoboto{};
+  private:
+    Font fontRoboto{};
 };

@@ -28,52 +28,49 @@ SOFTWARE.
 
 #include <iostream>
 
-App::App(int32_t width, int32_t height, const char *title)
+App::App(int32_t width, int32_t height, const char* title)
 {
-	SetConfigFlags(FLAG_WINDOW_MAXIMIZED | FLAG_WINDOW_RESIZABLE |
-		       FLAG_MSAA_4X_HINT);
-	InitWindow(1600, 900, title);
+    SetConfigFlags(FLAG_WINDOW_MAXIMIZED | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
+    InitWindow(1600, 900, title);
 
-	SetTargetFPS(GetMonitorRefreshRate(0));
+    SetTargetFPS(GetMonitorRefreshRate(0));
 
-	fontRoboto = LoadFontEx("fonts/Roboto-Bold.ttf", 16, nullptr, 250);
-	if (!fontRoboto.texture.id) {
-		std::cout
-			<< "Failed to load Roboto font, falling back to default font."
-			<< std::endl;
-	}
+    fontRoboto = LoadFontEx("fonts/Roboto-Bold.ttf", 16, nullptr, 250);
+    if (!fontRoboto.texture.id)
+        {
+            std::cout << "Failed to load Roboto font, falling back to default font." << std::endl;
+        }
 }
 
 App::~App()
 {
-	if (fontRoboto.texture.id) {
-		UnloadFont(fontRoboto);
-	}
-	CloseWindow();
+    if (fontRoboto.texture.id)
+        {
+            UnloadFont(fontRoboto);
+        }
+    CloseWindow();
 }
 
-bool App::ShouldRun() const
+bool
+App::ShouldRun() const
 {
-	return !WindowShouldClose();
+    return !WindowShouldClose();
 }
 
-bool App::OpenFileDialog(std::string &filePath,
-			 const std::vector<std::string> &extension) const
+bool
+App::OpenFileDialog(std::string& filePath, const std::vector<std::string>& extension) const
 {
-	std::vector<const char *> extensions;
-	extensions.reserve(extension.size());
-	std::transform(extension.begin(), extension.end(),
-		       std::back_inserter(extensions),
-		       [](const std::string &str) { return str.c_str(); });
+    std::vector<const char*> extensions;
+    extensions.reserve(extension.size());
+    std::transform(extension.begin(), extension.end(), std::back_inserter(extensions), [](const std::string& str) { return str.c_str(); });
 
-	const char *result{ tinyfd_openFileDialog(
-		"Select a file", NULL, extension.size(), extensions.data(),
-		nullptr, 0) };
-	if (result) {
-		filePath = std::string(result);
-		// Tinyfiledialogs not changing the working path to the selected one thus some relative files can not be loaded
-		return true;
-	}
+    const char* result{ tinyfd_openFileDialog("Select a file", NULL, extension.size(), extensions.data(), nullptr, 0) };
+    if (result)
+        {
+            filePath = std::string(result);
+            // Tinyfiledialogs not changing the working path to the selected one thus some relative files can not be loaded
+            return true;
+        }
 
-	return false;
+    return false;
 }

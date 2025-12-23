@@ -28,12 +28,16 @@ SOFTWARE.
 
 #include <cstdint>
 
-template <typename T> struct TVec2 {
-	T x{}, y{};
+template<typename T>
+struct TVec2
+{
+    T x{}, y{};
 };
 
-template <typename T> struct TRect {
-	T x{}, y{}, w{}, h{};
+template<typename T>
+struct TRect
+{
+    T x{}, y{}, w{}, h{};
 };
 
 // Use int32_t for all coordinates and sizes since raygui/raylib use int for those
@@ -44,15 +48,16 @@ using Rect = TRect<int32_t>;
 namespace to
 {
 
-inline Vector2 Vector2_(const Vec2 &vec)
+inline Vector2
+Vector2_(const Vec2& vec)
 {
-	return { static_cast<float>(vec.x), static_cast<float>(vec.y) };
+    return { static_cast<float>(vec.x), static_cast<float>(vec.y) };
 }
 
-inline Rectangle Rectangle_(const Rect &rect)
+inline Rectangle
+Rectangle_(const Rect& rect)
 {
-	return { static_cast<float>(rect.x), static_cast<float>(rect.y),
-		 static_cast<float>(rect.w), static_cast<float>(rect.h) };
+    return { static_cast<float>(rect.x), static_cast<float>(rect.y), static_cast<float>(rect.w), static_cast<float>(rect.h) };
 }
 
 }
@@ -60,15 +65,16 @@ inline Rectangle Rectangle_(const Rect &rect)
 namespace from
 {
 
-inline Vec2 Vector2_(const Vector2 &vec)
+inline Vec2
+Vector2_(const Vector2& vec)
 {
-	return { static_cast<int32_t>(vec.x), static_cast<int32_t>(vec.y) };
+    return { static_cast<int32_t>(vec.x), static_cast<int32_t>(vec.y) };
 }
 
-inline Rectangle Rectangle_(const Rect &rect)
+inline Rectangle
+Rectangle_(const Rect& rect)
 {
-	return { static_cast<float>(rect.x), static_cast<float>(rect.y),
-		 static_cast<float>(rect.w), static_cast<float>(rect.h) };
+    return { static_cast<float>(rect.x), static_cast<float>(rect.y), static_cast<float>(rect.w), static_cast<float>(rect.h) };
 }
 
 }

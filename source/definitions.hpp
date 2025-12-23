@@ -28,39 +28,43 @@ SOFTWARE.
 
 #include "geometry.hpp"
 
-enum class EAnimationType {
-	SPRITESHEET,
-	KEYFRAME,
+enum class EAnimationType
+{
+    SPRITESHEET,
+    KEYFRAME,
 };
 
-enum class EModalType {
-	NONE,
-	CREATE_ANIMATION,
-	CONFIRM_DELETE,
+enum class EModalType
+{
+    NONE,
+    CREATE_ANIMATION,
+    CONFIRM_DELETE,
 };
 
-enum EControlIndex : int32_t {
-	NONE = 0,
-	TOP = 1 << 1,
-	BOTTOM = 1 << 2,
-	LEFT = 1 << 3,
-	RIGHT = 1 << 4,
-	CENTER = TOP | BOTTOM | LEFT | RIGHT,
+enum EControlIndex : int32_t
+{
+    NONE   = 0,
+    TOP    = 1 << 1,
+    BOTTOM = 1 << 2,
+    LEFT   = 1 << 3,
+    RIGHT  = 1 << 4,
+    CENTER = TOP | BOTTOM | LEFT | RIGHT,
 };
 
-struct View {
-	float zoom{ 1.f };
-	float prevZoom{ 1.f };
-	float fitZoom{ 1.f };
-	Vec2 pan{};
+struct View
+{
+    float zoom{ 1.f };
+    float prevZoom{ 1.f };
+    float fitZoom{ 1.f };
+    Vec2  pan{};
 
-	Rectangle TransformRect(const Rectangle &rect) const
-	{
-		Rectangle transformedRect{};
-		transformedRect.x = rect.x * zoom + pan.x;
-		transformedRect.y = rect.y * zoom + pan.y;
-		transformedRect.width = rect.width * zoom;
-		transformedRect.height = rect.height * zoom;
-		return transformedRect;
-	}
+    Rectangle TransformRect(const Rectangle& rect) const
+    {
+        Rectangle transformedRect{};
+        transformedRect.x      = rect.x * zoom + pan.x;
+        transformedRect.y      = rect.y * zoom + pan.y;
+        transformedRect.width  = rect.width * zoom;
+        transformedRect.height = rect.height * zoom;
+        return transformedRect;
+    }
 };
