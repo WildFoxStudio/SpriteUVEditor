@@ -65,6 +65,12 @@ std::unique_ptr<Project> CP{ std::make_unique<Project>() };
 #pragma region Helpers
 
 float
+GetStringWidth(const std::string& str)
+{
+    return static_cast<float>(GetTextWidth(str.c_str()) + PAD);
+}
+
+float
 ZoomFitIntoRect(int texWidth, int texHeight, Rectangle targetRect)
 {
     const float scaleX{ targetRect.width / static_cast<float>(texWidth) };
@@ -77,7 +83,7 @@ NumericBox(Rectangle rect, char* const name, int* value, int min, int max, bool&
 {
     GuiDrawRectangle(rect, 1, GRAY, LIGHTGRAY);
 
-    const auto textW{ GetTextWidth(name) };
+    const auto textW{ GetStringWidth(name) };
     rect.x += textW;
     rect.width -= textW;
 
@@ -117,7 +123,7 @@ void
 TextRect(Rectangle rect, const char* const str)
 {
     GuiDrawRectangle(rect, 1, GRAY, LIGHTGRAY);
-    GuiDrawText(str, { rect.x + 10, rect.y + rect.height * .5f, (float)GetTextWidth(str), 0.f }, 1, DARKGRAY);
+    GuiDrawText(str, { rect.x + 10, rect.y + rect.height * .5f, GetStringWidth(str), 0.f }, 1, DARKGRAY);
 }
 
 template<typename T>
@@ -198,11 +204,11 @@ DrawSpritesheetUvProperties(Rectangle rect, SpritesheetUv& p)
             // Draw preview background
             DrawRectangleRec(previewRect, WHITE);
 
-            const Vector2 uvOffset{ (p.CurrentFrameIndex.Value % p.Property_Columns.Value) * p.Uv.w, (p.CurrentFrameIndex.Value / p.Property_Columns.Value) * p.Uv.h };
+            const Vec2 uvOffset{ (p.CurrentFrameIndex.Value % p.Property_Columns.Value) * p.Uv.w, (p.CurrentFrameIndex.Value / p.Property_Columns.Value) * p.Uv.h };
 
-            const Vector2 uvTopLeft{ p.Uv.x + uvOffset.x, p.Uv.y + uvOffset.y };
+            const Vec2 uvTopLeft{ p.Uv.x + uvOffset.x, p.Uv.y + uvOffset.y };
 
-            const Vector2 uvBottomRight{ uvTopLeft.x + p.Uv.w, uvTopLeft.y + p.Uv.h };
+            const Vec2 uvBottomRight{ uvTopLeft.x + p.Uv.w, uvTopLeft.y + p.Uv.h };
 
             // Draw the UV rect
             rlSetTexture(CP->SpriteTexture->id);
@@ -261,7 +267,7 @@ DrawKeyframeProperties(Rectangle rect, KeyframeUv& p)
 {
     // Draw UV Rect
     constexpr std::string_view err{ "KEYFRAME not Supported yet!" };
-    DrawText(err.data(), rect.x + rect.width / 2.f - GetTextWidth(err.data()) / 2.f, rect.y, GuiGetStyle(DEFAULT, TEXT_SIZE), RED);
+    DrawText(err.data(), rect.x + rect.width / 2.f - GetStringWidth(err.data()) / 2.f, rect.y, GuiGetStyle(DEFAULT, TEXT_SIZE), RED);
 }
 
 void
@@ -576,7 +582,7 @@ main()
                 }
 
             // Open sprite button
-            const Rectangle openButtonRect{ TITLE_X_OFFSET, PAD, GetTextWidth("Open sprite") * 1.f + PAD, 30 };
+            const Rectangle openButtonRect{ TITLE_X_OFFSET, PAD, GetStringWidth("Open sprite") * 1.f + PAD, 30 };
             if (GuiButton(openButtonRect, "Open sprite"))
                 {
                     std::string newImagePath{};
@@ -614,7 +620,7 @@ main()
 
             // Draw grid size
             {
-                const Rectangle rect{ TITLE_X_OFFSET, PAD, GetTextWidth("Grid size") + 80.f, 30 };
+                const Rectangle rect{ TITLE_X_OFFSET, PAD, GetStringWidth("Grid size") + 80.f, 30 };
                 (void)(NumericBox(rect, "Grid size", &app.GridSize, 0, 8196, app.GridSizeInputActive));
 
                 TITLE_X_OFFSET += rect.width + PAD;
@@ -630,7 +636,7 @@ main()
 
             {
                 // Reset zoom to fit
-                const Rectangle fitViewRect{ TITLE_X_OFFSET, PAD, GetTextWidth("Fit view") + PAD, 30 };
+                const Rectangle fitViewRect{ TITLE_X_OFFSET, PAD, GetStringWidth("Fit view"), 30 };
                 if (GuiButton(fitViewRect, "Fit view"))
                     {
                         // Reset view
@@ -644,7 +650,7 @@ main()
             {
                 // Create new animation
 
-                const Rectangle newAnimRect{ TITLE_X_OFFSET, PAD, GetTextWidth("Add") + PAD, 30 };
+                const Rectangle newAnimRect{ TITLE_X_OFFSET, PAD, GetStringWidth("Add"), 30 };
                 if (GuiButton(newAnimRect, "Add"))
                     {
                         ActiveModal = EModalType::CREATE_ANIMATION;
@@ -654,7 +660,7 @@ main()
                 // Delete animation
                 if (hasValidSelectedAnimation)
                     {
-                        const Rectangle delAnimRect{ TITLE_X_OFFSET, PAD, GetTextWidth("Delete") + PAD, 30 };
+                        const Rectangle delAnimRect{ TITLE_X_OFFSET, PAD, GetStringWidth("Delete"), 30 };
                         if (GuiButton(delAnimRect, "Delete"))
                             {
                                 ActiveModal = EModalType::CONFIRM_DELETE;
@@ -665,7 +671,7 @@ main()
 
             // Animation selection
             {
-                const auto nameW{ std::max(150, GetTextWidth(animationNameOrPlaceholder)) * 1.f };
+                const auto nameW{ std::max(150.f, GetStringWidth(animationNameOrPlaceholder)) };
 
                 const Rectangle animNameRect{ TITLE_X_OFFSET, PAD, nameW, 30 };
                 if (GuiButton(animNameRect, animationNameOrPlaceholder))
@@ -673,10 +679,8 @@ main()
                         ListState.ShowList = !ListState.ShowList;
                     }
                 const auto scrollHeight{ std::clamp(CP->ImmutableTransientAnimationNames.size() * 50.f, 100.f, 500.f) };
-                const auto maxStringW{ std::accumulate(CP->ImmutableTransientAnimationNames.begin(),
-                CP->ImmutableTransientAnimationNames.end(),
-                nameW,
-                [](float acc, const char* name) { return std::max(acc, static_cast<float>(GetTextWidth(name))); }) };
+                const auto maxStringW{ std::accumulate(
+                CP->ImmutableTransientAnimationNames.begin(), CP->ImmutableTransientAnimationNames.end(), nameW, [](float acc, const char* name) { return std::max(acc, GetStringWidth(name)); }) };
 
                 if (ListState.ShowList)
                     {
