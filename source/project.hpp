@@ -34,6 +34,7 @@ SOFTWARE.
 #include <variant>
 #include <vector>
 #include <map>
+#include <optional>
 
 struct Property {
 	int32_t Value{};
@@ -81,7 +82,9 @@ struct AnimationData {
 
 class Project {
     public:
-	bool SaveToFile(const std::string &filePath) const;
+	Project() = default;
+	Project(Texture2D sprite, const std::string &filePath);
+	bool SaveToFile() const;
 	bool LoadFromFile(const std::string &filePath);
 
 	std::vector<const char *> ImmutableTransientAnimationNames{};
@@ -95,10 +98,9 @@ class Project {
 			ImmutableTransientAnimationNames.push_back(name.data());
 		}
 	}
-
-    private:
-	Project(Texture2D sprite);
-	std::string spritePath{};
-	Texture2D texture{};
+	std::string SpritePath{};
+	std::optional<Texture2D> SpriteTexture{};
 	std::map<std::string, AnimationData> AnimationNameToSpritesheet{};
+
+	bool HasUnsavedChanges();
 };

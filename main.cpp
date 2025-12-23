@@ -43,42 +43,15 @@ SOFTWARE.
 #include <variant>
 #include <numeric>
 #include <cassert>
+#include <memory>
 
 /* Gui padding*/
 constexpr int32_t PAD{ 10 };
-
-/* The loaded sprite sheet texture */
-std::optional<Texture2D> SpriteTexture{};
+EModalType ActiveModal{ EModalType::NONE };
+View view{};
+std::unique_ptr<Project> CurrentProject{ std::make_unique<Project>() };
 
 #pragma region Helpers
-
-std::optional<std::string>
-LoadSpriteTexture(const std::string &imagePath,
-		  std::optional<Texture2D> &outTexture)
-{
-	Image loadedImg = LoadImage(imagePath.c_str());
-	// Failed to open the image!
-	if (loadedImg.data == nullptr) {
-		return "Failed to open the image!";
-	}
-
-	Texture2D newTexture = LoadTextureFromImage(loadedImg);
-	UnloadImage(loadedImg);
-
-	// Failed to allocate the sprite GPU texture!
-	if (newTexture.id == 0) {
-		return "Failed to allocate the sprite GPU texture!";
-	}
-
-	// Unload and replace
-	if (outTexture.has_value()) {
-		UnloadTexture(outTexture.value());
-	}
-	outTexture.emplace(std::move(newTexture));
-
-	// No error
-	return {};
-}
 
 float ZoomFitIntoRect(int texWidth, int texHeight, Rectangle targetRect)
 {
@@ -198,7 +171,7 @@ void DrawSpritesheetUvProperties(Rectangle rect, SpritesheetUv &p)
 		0, INT32_MAX, p.Property_FrameDurationMs.ActiveBox));
 	rect.y += 30 + PAD;
 
-	if (SpriteTexture.has_value()) {
+	if (CurrentProject->SpriteTexture.has_value()) {
 		// Draw preview animation frame
 		const Rectangle previewRect{ rect.x, rect.y, rect.width,
 					     rect.width };
@@ -241,24 +214,29 @@ void DrawSpritesheetUvProperties(Rectangle rect, SpritesheetUv &p)
 					     uvTopLeft.y + p.Uv.h };
 
 		// Draw the UV rect
-		rlSetTexture(SpriteTexture->id);
+		rlSetTexture(CurrentProject->SpriteTexture->id);
 		rlBegin(RL_QUADS);
 
-		rlTexCoord2f(uvTopLeft.x / SpriteTexture->width,
-			     uvTopLeft.y / SpriteTexture->height);
+		rlTexCoord2f(uvTopLeft.x / CurrentProject->SpriteTexture->width,
+			     uvTopLeft.y /
+				     CurrentProject->SpriteTexture->height);
 		rlVertex2f(spriteRect.x, spriteRect.y);
 
-		rlTexCoord2f(uvTopLeft.x / SpriteTexture->width,
-			     uvBottomRight.y / SpriteTexture->height);
+		rlTexCoord2f(uvTopLeft.x / CurrentProject->SpriteTexture->width,
+			     uvBottomRight.y /
+				     CurrentProject->SpriteTexture->height);
 		rlVertex2f(spriteRect.x, spriteRect.y + spriteRect.height);
 
-		rlTexCoord2f(uvBottomRight.x / SpriteTexture->width,
-			     uvBottomRight.y / SpriteTexture->height);
+		rlTexCoord2f(uvBottomRight.x /
+				     CurrentProject->SpriteTexture->width,
+			     uvBottomRight.y /
+				     CurrentProject->SpriteTexture->height);
 		rlVertex2f(spriteRect.x + spriteRect.width,
 			   spriteRect.y + spriteRect.height);
 
-		rlTexCoord2f(uvBottomRight.x / SpriteTexture->width,
-			     uvTopLeft.y / SpriteTexture->height);
+		rlTexCoord2f(
+			uvBottomRight.x / CurrentProject->SpriteTexture->width,
+			uvTopLeft.y / CurrentProject->SpriteTexture->height);
 		rlVertex2f(spriteRect.x + spriteRect.width, spriteRect.y);
 
 		rlEnd();
@@ -324,9 +302,6 @@ void DrawPropertiesIfValidPtr(Rectangle rect, AnimationData *p)
 	}
 }
 
-EModalType ActiveModal{ EModalType::NONE };
-View view{};
-
 // Selection list
 struct ListSelection {
 	int32_t scrollIndex{};
@@ -345,37 +320,30 @@ AnimationData *PropertyPanel{};
 using ANIMATION_NAME_T = char[32 + 1];
 ANIMATION_NAME_T NewAnimationName{ "Animation_0" };
 bool NewAnimationEditMode{ false };
-std::unordered_map<std::string, AnimationData> AnimationNameToSpritesheet{};
-std::vector<const char *> ImmutableTransientAnimationNames{};
-
-void RebuildAnimationNamesVector()
-{
-	ImmutableTransientAnimationNames.clear();
-	ImmutableTransientAnimationNames.reserve(
-		AnimationNameToSpritesheet.size());
-	for (const auto &[name, spriteSheet] : AnimationNameToSpritesheet) {
-		ImmutableTransientAnimationNames.push_back(name.data());
-	}
-}
 
 Rectangle ScreenToImageRect(const Rectangle &r)
 {
-	if (!SpriteTexture.has_value())
+	if (!CurrentProject->SpriteTexture.has_value())
 		return {};
-	return { (r.x - view.pan.x) / (view.zoom * SpriteTexture->width),
-		 (r.y - view.pan.y) / (view.zoom * SpriteTexture->height),
-		 r.width / (view.zoom * SpriteTexture->width),
-		 r.height / (view.zoom * SpriteTexture->height) };
+	return { (r.x - view.pan.x) /
+			 (view.zoom * CurrentProject->SpriteTexture->width),
+		 (r.y - view.pan.y) /
+			 (view.zoom * CurrentProject->SpriteTexture->height),
+		 r.width / (view.zoom * CurrentProject->SpriteTexture->width),
+		 r.height /
+			 (view.zoom * CurrentProject->SpriteTexture->height) };
 }
 
 Rectangle ImageToScreenRect(const Rectangle &r)
 {
-	if (!SpriteTexture.has_value())
+	if (!CurrentProject->SpriteTexture.has_value())
 		return {};
-	return { view.pan.x + r.x * SpriteTexture->width * view.zoom,
-		 view.pan.y + r.y * SpriteTexture->height * view.zoom,
-		 r.width * SpriteTexture->width * view.zoom,
-		 r.height * SpriteTexture->height * view.zoom };
+	return { view.pan.x +
+			 r.x * CurrentProject->SpriteTexture->width * view.zoom,
+		 view.pan.y + r.y * CurrentProject->SpriteTexture->height *
+				      view.zoom,
+		 r.width * CurrentProject->SpriteTexture->width * view.zoom,
+		 r.height * CurrentProject->SpriteTexture->height * view.zoom };
 }
 
 int main()
@@ -470,27 +438,36 @@ int main()
 		BeginDrawing();
 		ClearBackground(GRAY);
 
+		// Each frame rebuild the animation names vector
+		CurrentProject->RebuildAnimationNamesVector();
+
 		const bool hasValidSelectedAnimation{
 			ListState.activeIndex > -1 &&
-			!ImmutableTransientAnimationNames.empty() &&
+			!CurrentProject->ImmutableTransientAnimationNames
+				 .empty() &&
 			ListState.activeIndex <
-				ImmutableTransientAnimationNames.size()
+				CurrentProject->ImmutableTransientAnimationNames
+					.size()
 		};
 
-		const int32_t CANVAS_WIDTH{ SpriteTexture.has_value() ?
-						    SpriteTexture->width :
-						    1920 };
-		const int32_t CANVAS_HEIGHT{ SpriteTexture.has_value() ?
-						     SpriteTexture->height :
-						     1080 };
+		const int32_t CANVAS_WIDTH{
+			CurrentProject->SpriteTexture.has_value() ?
+				CurrentProject->SpriteTexture->width :
+				1920
+		};
+		const int32_t CANVAS_HEIGHT{
+			CurrentProject->SpriteTexture.has_value() ?
+				CurrentProject->SpriteTexture->height :
+				1080
+		};
 
 		const Rectangle canvasRect{ view.pan.x, view.pan.y,
 					    CANVAS_WIDTH * view.zoom,
 					    CANVAS_HEIGHT * view.zoom };
 
 		// Draw sprite texture
-		if (SpriteTexture.has_value()) {
-			DrawTextureEx(SpriteTexture.value(),
+		if (CurrentProject->SpriteTexture.has_value()) {
+			DrawTextureEx(CurrentProject->SpriteTexture.value(),
 				      to::Vector2_(view.pan), 0, view.zoom,
 				      WHITE);
 			// Draw outline
@@ -523,13 +500,17 @@ int main()
 			//	    ImmutableTransientAnimationNames
 			//		    [ListState.activeIndex])))
 			PropertyPanel = nullptr;
-			PropertyPanel = &AnimationNameToSpritesheet.at(
-				ImmutableTransientAnimationNames
-					[ListState.activeIndex]);
+			PropertyPanel =
+				&CurrentProject->AnimationNameToSpritesheet.at(
+					CurrentProject
+						->ImmutableTransientAnimationNames
+							[ListState.activeIndex]);
 
-			auto &animationVariant = AnimationNameToSpritesheet.at(
-				ImmutableTransientAnimationNames
-					[ListState.activeIndex]);
+			auto &animationVariant =
+				CurrentProject->AnimationNameToSpritesheet.at(
+					CurrentProject
+						->ImmutableTransientAnimationNames
+							[ListState.activeIndex]);
 			if (std::holds_alternative<SpritesheetUv>(
 				    animationVariant.Data)) {
 				auto &spriteSheet = std::get<SpritesheetUv>(
@@ -684,7 +665,7 @@ int main()
 		const char *animationNameOrPlaceholder{
 			!hasValidSelectedAnimation ?
 				"No animation" :
-				ImmutableTransientAnimationNames
+				CurrentProject->ImmutableTransientAnimationNames
 					[ListState.activeIndex]
 		};
 
@@ -703,6 +684,10 @@ int main()
 		if (GuiButton(openButtonRect, "Open sprite")) {
 			std::string newImagePath{};
 
+			if (CurrentProject->HasUnsavedChanges()) {
+				//ActiveModal = EModalType::CONFIRM_DISCARD_CHANGES;
+			}
+
 			// Since raylib relies on stb_image for image loading right now the formats supported are:
 			if (app.OpenFileDialog(newImagePath,
 					       { "*.png", "*.jpg", "*.jpeg",
@@ -710,19 +695,21 @@ int main()
 				std::cout << "Trying to load:" << newImagePath
 					  << std::endl;
 				// Load texture if possible
-				app.LastError = LoadSpriteTexture(
-					newImagePath, SpriteTexture);
-				if (!app.LastError.has_value()) {
-					// Update path
-					app.ImagePath = std::move(newImagePath);
+				auto newProject{ std::make_unique<Project>() };
+				if (newProject->LoadFromFile(newImagePath)) {
+					CurrentProject = std::move(newProject);
 
 					// Reset view
 					{
 						view.pan = { 1, PAD * 2 + 30 };
 						//Set the zoom to fit the image on the max size
 						view.zoom = ZoomFitIntoRect(
-							SpriteTexture->width,
-							SpriteTexture->height,
+							CurrentProject
+								->SpriteTexture
+								->width,
+							CurrentProject
+								->SpriteTexture
+								->height,
 							{ 0, 0,
 							  GetRenderWidth() -
 								  400.f,
@@ -730,6 +717,9 @@ int main()
 								  100.f });
 						view.fitZoom = view.zoom;
 					}
+
+				} else {
+					app.LastError = "Failed to load image!";
 				}
 			}
 		}
@@ -802,7 +792,6 @@ int main()
 
 		// Animation selection
 		{
-			RebuildAnimationNamesVector();
 			const auto nameW{
 				std::max(150,
 					 GetTextWidth(
@@ -817,12 +806,16 @@ int main()
 				ListState.ShowList = !ListState.ShowList;
 			}
 			const auto scrollHeight{ std::clamp(
-				ImmutableTransientAnimationNames.size() * 50.f,
+				CurrentProject->ImmutableTransientAnimationNames
+						.size() *
+					50.f,
 				100.f, 500.f) };
 			const auto maxStringW{ std::accumulate(
-				ImmutableTransientAnimationNames.begin(),
-				ImmutableTransientAnimationNames.end(), nameW,
-				[](float acc, const char *name) {
+				CurrentProject->ImmutableTransientAnimationNames
+					.begin(),
+				CurrentProject->ImmutableTransientAnimationNames
+					.end(),
+				nameW, [](float acc, const char *name) {
 					return std::max(
 						acc,
 						static_cast<float>(
@@ -848,8 +841,12 @@ int main()
 						 panelView.height);
 				GuiListViewEx(
 					animListRect,
-					ImmutableTransientAnimationNames.data(),
-					ImmutableTransientAnimationNames.size(),
+					CurrentProject
+						->ImmutableTransientAnimationNames
+						.data(),
+					CurrentProject
+						->ImmutableTransientAnimationNames
+						.size(),
 					&ListState.scrollIndex,
 					&ListState.activeIndex,
 					&ListState.focusIndex);
@@ -857,7 +854,8 @@ int main()
 				ListState.activeIndex = std::clamp(
 					ListState.activeIndex, -1,
 					static_cast<int32_t>(
-						ImmutableTransientAnimationNames
+						CurrentProject
+							->ImmutableTransientAnimationNames
 							.size()) -
 						1);
 				EndScissorMode();
@@ -965,9 +963,12 @@ int main()
 					NewAnimationEditMode));
 				bool alreadyExists{ false };
 				if (const auto found{
-					    AnimationNameToSpritesheet.find(
-						    NewAnimationName) };
-				    found != AnimationNameToSpritesheet.end()) {
+					    CurrentProject
+						    ->AnimationNameToSpritesheet
+						    .find(NewAnimationName) };
+				    found !=
+				    CurrentProject->AnimationNameToSpritesheet
+					    .end()) {
 					alreadyExists = true;
 				}
 
@@ -995,11 +996,15 @@ int main()
 
 					AnimationData animData{ std::move(
 						spriteSheet) };
-					AnimationNameToSpritesheet.emplace(
-						std::string(NewAnimationName),
-						std::move(animData));
+					CurrentProject
+						->AnimationNameToSpritesheet
+						.emplace(
+							std::string(
+								NewAnimationName),
+							std::move(animData));
 					ListState.activeIndex =
-						AnimationNameToSpritesheet
+						CurrentProject
+							->AnimationNameToSpritesheet
 							.size() -
 						1;
 				}
@@ -1012,22 +1017,26 @@ int main()
 					ActiveModal = EModalType::NONE;
 				}
 			} else if (ActiveModal == EModalType::CONFIRM_DELETE) {
-				assert(!ImmutableTransientAnimationNames
+				assert(!CurrentProject
+						->ImmutableTransientAnimationNames
 						.empty());
 				std::string tmp{ "Delete " };
-				tmp += ImmutableTransientAnimationNames
-					[ListState.activeIndex];
+				tmp += CurrentProject
+					       ->ImmutableTransientAnimationNames
+						       [ListState.activeIndex];
 
 				if (GuiMessageBox(msgRect, "Confirm delete",
 						  tmp.c_str(),
 						  "Cancel;Delete") == 2) {
 					ActiveModal = EModalType::NONE;
 
-					AnimationNameToSpritesheet.erase(
-						ImmutableTransientAnimationNames
-							[ListState.activeIndex]);
+					CurrentProject
+						->AnimationNameToSpritesheet
+						.erase(CurrentProject->ImmutableTransientAnimationNames
+							       [ListState.activeIndex]);
 					ListState.activeIndex = -1;
-					RebuildAnimationNamesVector();
+					CurrentProject
+						->RebuildAnimationNamesVector();
 				}
 			}
 		}

@@ -60,10 +60,12 @@ LoadSpriteTexture(const std::string &imagePath,
 }
 };
 
-bool Project::SaveToFile(const std::string &filePath) const
+bool Project::SaveToFile() const
 {
-	assert(!filePath.empty());
-	assert(texture.id != 0); // Should have a texture loaded
+	if (SpritePath.empty())
+		return false;
+
+	assert(SpriteTexture.has_value()); // Should have a texture loaded
 	assert(false); // Not implemented yet
 	return false;
 }
@@ -71,13 +73,14 @@ bool Project::SaveToFile(const std::string &filePath) const
 bool Project::LoadFromFile(const std::string &filePath)
 {
 	assert(!filePath.empty());
-	assert(texture.id == 0); // Should not have a texture already loaded
+	assert(!SpriteTexture
+			.has_value()); // Should not have a texture already loaded
 
 	std::optional<Texture2D> loadedTexture{};
 	const auto loadError{ LoadSpriteTexture(filePath, loadedTexture) };
 	if (!loadError.has_value()) {
-		texture = std::move(loadedTexture.value());
-		spritePath = filePath;
+		SpriteTexture = std::move(loadedTexture.value());
+		SpritePath = filePath;
 		return true;
 	}
 
@@ -90,10 +93,19 @@ bool Project::LoadFromFile(const std::string &filePath)
 		// Failed to open the file, who cares it might not exist yet.
 	}
 
-	return texture.id > 0;
+	return SpriteTexture.has_value();
 }
 
-Project::Project(Texture2D sprite)
-	: texture{ sprite }
+bool Project::HasUnsavedChanges()
 {
+	// Compare latest json vs previous json
+	return true;
+}
+
+Project::Project(Texture2D sprite, const std::string &filePath)
+	: SpritePath{ filePath }
+	, SpriteTexture{ sprite }
+{
+	assert(!filePath.empty());
+	assert(sprite.id > 0);
 }
