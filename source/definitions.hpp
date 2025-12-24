@@ -65,8 +65,8 @@ struct View
 
     inline void SafelyClampPan(const int32_t canvasW, const int32_t canvasH)
     {
-        pan.x = std::clamp(pan.x, -canvasW / 2, canvasH * 2);
-        pan.y = std::clamp(pan.y, -canvasW / 2, canvasH * 2);
+        pan.x = std::clamp(pan.x, -canvasW / 2.f, canvasH * 2.f);
+        pan.y = std::clamp(pan.y, -canvasW / 2.f, canvasH * 2.f);
     }
 
     inline Rectangle TransformRect(const Rectangle& rect) const
