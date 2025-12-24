@@ -386,7 +386,6 @@ main()
                             const bool  canZoom{ (wheelSign && view.zoom > view.GetMinZoom()) || (!wheelSign && view.zoom < view.GetMaxZoom()) };
                             if (wheel != 0 && canZoom)
                                 {
-                                    view.prevZoom = view.zoom;
                                     const Vector2 mouse{ GetMousePosition() };
                                     // Zoom
                                     view.zoom = !wheelSign ? view.zoom * (1.f + ZOOM_STEP) : view.zoom * (1.f - ZOOM_STEP);
@@ -399,6 +398,7 @@ main()
                                     view.pan.y              = mouse.y - canvasPointUnderMouse.y * view.zoom;
 
                                     view.SafelyClampPan(CANVAS_WIDTH, CANVAS_HEIGHT);
+                                    view.prevZoom = view.zoom;
                                 }
                         }
             }
@@ -495,13 +495,9 @@ main()
                                 mousePos      = from::Vector2_(rayMousePos);
                             }
 
-                            // DrawRectanglePro({ 0,0,100 * zoom,100 * zoom }, mousePos, 0.f, RED);
-
                             RoundTo(mousePos.x, g, app.SnapToGrid);
                             RoundTo(mousePos.y, g, app.SnapToGrid);
-                            // printf("Mousepos %f %f\n", mousePos.x, mousePos.y);
-                            // DrawRectangleRec({ mousePos.x, mousePos.y, 10 * zoom, 10 * zoom }, YELLOW);
-                            // DrawUVRectDashed({ mousePos.x, mousePos.y, 10, 10 });
+                            // printf("Mousepos %i %i\n", mousePos.x, mousePos.y);
 
                             // If zoom has changed
                             if (view.prevZoom != view.zoom)
@@ -510,10 +506,11 @@ main()
                                     spriteSheet.DeltaMousePos = mousePos;
                                 }
 
-                            if (spriteSheet.DraggingControlIndex != EControlIndex::NONE)
+                            Vec2 mouseMov{ spriteSheet.DeltaMousePos.x - mousePos.x, spriteSheet.DeltaMousePos.y - mousePos.y };
+                            // printf("mouseMov %i %i\n", mouseMov.x, mouseMov.y);
+                            if (spriteSheet.DraggingControlIndex != EControlIndex::NONE && mouseMov.x + mouseMov.y != 0)
                                 {
                                     // Handle dragging
-                                    Vec2 mouseMov{ spriteSheet.DeltaMousePos.x - mousePos.x, spriteSheet.DeltaMousePos.y - mousePos.y };
 
                                     if (spriteSheet.DraggingControlIndex & EControlIndex::TOP)
                                         {
@@ -680,24 +677,6 @@ main()
                             }
                     }
                 TITLE_X_OFFSET += animNameRect.width + PAD;
-
-                // Animation type selection
-                if (hasValidSelectedAnimation)
-                    {
-                        // TO DO CHOOSE WHEN CREATING ANIMATION ONLY!!!
-                        // if (GuiDropdownBox({ TITLE_X_OFFSET, PAD, 150, 30 }, "Spritesheet;Keyframe", &PropertyPanel->GuiAnimTypeIndex, PropertyPanel->ShowAnimTypeDropDown))
-                        //{
-                        //	PropertyPanel->ShowAnimTypeDropDown = !PropertyPanel->ShowAnimTypeDropDown;
-
-                        //	switch (PropertyPanel.GuiAnimTypeIndex)
-                        //	{
-                        //	case 0:PropertyPanel.AnimationType = EAnimationType::SPRITESHEET; break;
-                        //	case 1:PropertyPanel.AnimationType = EAnimationType::KEYFRAME; break;
-                        //	default: break;
-                        //	}
-                        //}
-                        // TITLE_X_OFFSET += 150 + PAD;
-                    }
             }
 
             // Property panel
