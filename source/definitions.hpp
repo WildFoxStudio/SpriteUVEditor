@@ -58,6 +58,7 @@ struct View
     float   fitZoom{ 1.f };
     Vector2 pan{};
 
+    Vector2      GetZoomedPan() const { return Vector2{ pan.x * zoom, pan.y * zoom }; }
     inline float GetMinZoom() const { return fitZoom * .25f; };
     inline float GetMaxZoom() const { return fitZoom * 1000.f; };
 

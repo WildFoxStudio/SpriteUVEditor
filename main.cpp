@@ -384,30 +384,43 @@ main()
                 if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
                     {
                         Vector2 d{ GetMouseDelta() };
-                        view.pan.x += d.x;
-                        view.pan.y += d.y;
+                        view.pan.x += d.x * (1.f / view.zoom);
+                        view.pan.y += d.y * (1.f / view.zoom);
+                        std::cout << "Pan:" << view.pan.x << " " << view.pan.y << std::endl;
                     }
                 else
                     // Mouse wheel zoom
                     if (!ListState.ShowList)
                         {
+                            const Vector2 mouse{ GetMousePosition() };
+                            const auto    deltaZoom{ view.zoom };
+                            Vector2       worldPoint{};
+                            worldPoint.x = (mouse.x - view.pan.x * deltaZoom) / deltaZoom;
+                            worldPoint.y = (mouse.y - view.pan.y * deltaZoom) / deltaZoom;
+
                             const auto  wheelSign{ std::signbit(GetMouseWheelMove()) };
                             const float wheel{ std::copysign(1.0f, GetMouseWheelMove()) * (GetMouseWheelMove() != 0.0f) };
                             const bool  canZoom{ (wheelSign && view.zoom > view.GetMinZoom()) || (!wheelSign && view.zoom < view.GetMaxZoom()) };
                             if (wheel != 0 && canZoom)
                                 {
-                                    const Vector2 mouse{ GetMousePosition() };
+
                                     // Zoom
                                     view.zoom = !wheelSign ? view.zoom * (1.f + ZOOM_STEP) : view.zoom * (1.f - ZOOM_STEP);
                                     view.SafelyClampZoom();
                                     // Adjust pan so that the point under the mouse remains under the mouse after zoom
-                                    Vector2 canvasPointUnderMouse;
-                                    canvasPointUnderMouse.x = (mouse.x - view.pan.x) / view.prevZoom;
-                                    canvasPointUnderMouse.y = (mouse.y - view.pan.y) / view.prevZoom;
-                                    view.pan.x              = mouse.x - canvasPointUnderMouse.x * view.zoom;
-                                    view.pan.y              = mouse.y - canvasPointUnderMouse.y * view.zoom;
+                                    // PAN NOT WORKING WIP TODO FIX IT
+                                    view.pan.x = mouse.x - worldPoint.x * view.zoom;
+                                    view.pan.y = mouse.y - worldPoint.y * view.zoom;
 
                                     view.SafelyClampPan(CANVAS_WIDTH, CANVAS_HEIGHT);
+
+                                    std::cout << "Zoom:" << view.zoom << " prev:" << view.prevZoom << std::endl;
+                                    std::cout << "WorldMouse:" << worldPoint.x << " " << worldPoint.y << std::endl;
+                                    std::cout << "Pan:" << view.pan.x << " " << view.pan.y << std::endl;
+
+                                    worldPoint.x = (mouse.x - view.pan.x * deltaZoom) / deltaZoom;
+                                    worldPoint.y = (mouse.y - view.pan.y * deltaZoom) / deltaZoom;
+                                    std::cout << "WorldMouse:" << worldPoint.x << " " << worldPoint.y << std::endl;
                                     view.prevZoom = view.zoom;
                                 }
                         }
@@ -423,7 +436,7 @@ main()
 
             const bool hasValidSelectedAnimation{ ListState.activeIndex > -1 && !CP->ImmutableTransientAnimationNames.empty() && ListState.activeIndex < CP->ImmutableTransientAnimationNames.size() };
 
-            const Rectangle canvasRect{ view.pan.x, view.pan.y, CANVAS_WIDTH * view.zoom, CANVAS_HEIGHT * view.zoom };
+            const Rectangle canvasRect{ view.pan.x * view.zoom, view.pan.y * view.zoom, CANVAS_WIDTH * view.zoom, CANVAS_HEIGHT * view.zoom };
 
             // Draw sprite texture if has one
             if (CP->SpriteTexture.has_value())
@@ -445,8 +458,8 @@ main()
             // Draw canvas origin XY axis
             {
                 constexpr int32_t AXIS_LEN{ std::numeric_limits<int32_t>::max() };
-                DrawLineEx((view.pan), to::Vector2_({ AXIS_LEN, (int)view.pan.y }), 2.f, RED);
-                DrawLineEx((view.pan), to::Vector2_({ (int)view.pan.x, AXIS_LEN }), 2.f, GREEN);
+                DrawLineEx((view.GetZoomedPan()), to::Vector2_({ AXIS_LEN, (int)view.pan.y }), 2.f, RED);
+                DrawLineEx((view.GetZoomedPan()), to::Vector2_({ (int)view.pan.x, AXIS_LEN }), 2.f, GREEN);
             }
 
             // Draw the selected animation
