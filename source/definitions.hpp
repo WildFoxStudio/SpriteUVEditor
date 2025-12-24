@@ -53,12 +53,23 @@ enum EControlIndex : int32_t
 
 struct View
 {
-    float zoom{ 1.f };
-    float prevZoom{ 1.f };
-    float fitZoom{ 1.f };
-    Vec2  pan{};
+    float   zoom{ 1.f };
+    float   prevZoom{ 1.f };
+    float   fitZoom{ 1.f };
+    Vector2 pan{};
 
-    Rectangle TransformRect(const Rectangle& rect) const
+    inline float GetMinZoom() const { return fitZoom * .25f; };
+    inline float GetMaxZoom() const { return fitZoom * 1000.f; };
+
+    inline void SafelyClampZoom() { zoom = std::clamp(zoom, GetMinZoom(), GetMaxZoom()); }
+
+    inline void SafelyClampPan(const int32_t canvasW, const int32_t canvasH)
+    {
+        pan.x = std::clamp(pan.x, -canvasW / 2, canvasH * 2);
+        pan.y = std::clamp(pan.y, -canvasW / 2, canvasH * 2);
+    }
+
+    inline Rectangle TransformRect(const Rectangle& rect) const
     {
         Rectangle transformedRect{};
         transformedRect.x      = rect.x * zoom + pan.x;
@@ -66,5 +77,12 @@ struct View
         transformedRect.width  = rect.width * zoom;
         transformedRect.height = rect.height * zoom;
         return transformedRect;
+    }
+
+    inline static float ZoomFitIntoRect(int32_t texWidth, int32_t texHeight, const Rect& targetRect)
+    {
+        const auto scaleX{ targetRect.w / static_cast<float>(texWidth) };
+        const auto scaleY{ targetRect.h / static_cast<float>(texHeight) };
+        return std::min(scaleX, scaleY);
     }
 };

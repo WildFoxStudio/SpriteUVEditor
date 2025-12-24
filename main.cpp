@@ -49,13 +49,18 @@ SOFTWARE.
  * \brief The GUI padding between elements.
  */
 constexpr int32_t PAD{ 10 };
+constexpr int32_t VIEWPORT_GUI_RIGHT_PANEL_WIDTH{ 400 };
+constexpr int32_t VIEWPORT_GUI_OCCLUSION_Y{ 100 };
+constexpr int32_t DEFAULT_CANVAS_WIDTH{ 1920 };
+constexpr int32_t DEFAULT_CANVAS_HEIGHT{ 1080 };
 /**
  * \brief Currently active modal dialog.
  */
 EModalType ActiveModal{ EModalType::NONE };
 /**
- * \brief The camera/view state.
+ * \brief The camera/view states.
  */
+View defaultView{};
 View view{};
 /**
  * \brief Current loaded project - must always be valid ptr.
@@ -63,19 +68,16 @@ View view{};
 std::unique_ptr<Project> CP{ std::make_unique<Project>() };
 
 #pragma region Helpers
+void
+ResetViewToDefault()
+{
+    view = defaultView;
+}
 
 float
 GetStringWidth(const std::string& str)
 {
     return static_cast<float>(GetTextWidth(str.c_str()) + PAD);
-}
-
-float
-ZoomFitIntoRect(int texWidth, int texHeight, Rectangle targetRect)
-{
-    const float scaleX{ targetRect.width / static_cast<float>(texWidth) };
-    const float scaleY{ targetRect.height / static_cast<float>(texHeight) };
-    return std::min(scaleX, scaleY);
 }
 
 bool
@@ -344,83 +346,77 @@ main()
         }
     GuiSetStyle(DEFAULT, TEXT_SIZE, 16);
 
+    // Set the zoom to fit the image on the max size
+    {
+        defaultView.pan = { 1, PAD * 2 + 30 };
+        defaultView.fitZoom =
+        View::ZoomFitIntoRect(DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT, { 0, 0, GetRenderWidth() - VIEWPORT_GUI_RIGHT_PANEL_WIDTH, GetRenderHeight() - VIEWPORT_GUI_OCCLUSION_Y });
+        defaultView.zoom = view.fitZoom;
+        assert(defaultView.fitZoom > 0.f);
+    }
+
     while (app.ShouldRun())
         {
-            // -----------------------------------------------------
-            // Mouse panning
-            // -----------------------------------------------------
-            if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
-                {
-                    Vector2 d = GetMouseDelta();
-                    view.pan.x += d.x;
-                    view.pan.y += d.y;
-                }
 
-            // -----------------------------------------------------
-            // Mouse wheel zoom
-            // -----------------------------------------------------
-            view.prevZoom = view.zoom;
-            if (!ListState.ShowList)
-                {
-                    float wheel = GetMouseWheelMove();
-                    if (wheel != 0)
+            const int32_t CANVAS_WIDTH{ CP->SpriteTexture.has_value() ? CP->SpriteTexture->width : DEFAULT_CANVAS_WIDTH };
+            const int32_t CANVAS_HEIGHT{ CP->SpriteTexture.has_value() ? CP->SpriteTexture->height : DEFAULT_CANVAS_HEIGHT };
+
+#pragma region Events
+            {
+                // Handle window resize viewport
+                if (IsWindowResized())
+                    {
+                        // Update fit zoom on window resize
+                        defaultView.fitZoom =
+                        view.ZoomFitIntoRect(CANVAS_WIDTH, CANVAS_HEIGHT, { 0, 0, GetRenderWidth() - VIEWPORT_GUI_RIGHT_PANEL_WIDTH, GetRenderHeight() - VIEWPORT_GUI_OCCLUSION_Y });
+                    }
+
+                // Mouse panning
+                if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
+                    {
+                        Vector2 d{ GetMouseDelta() };
+                        view.pan.x += d.x;
+                        view.pan.y += d.y;
+                    }
+                else
+                    // Mouse wheel zoom
+                    if (!ListState.ShowList)
                         {
-                            Vector2 mouse = GetMousePosition();
+                            const auto  wheelSign{ std::signbit(GetMouseWheelMove()) };
+                            const float wheel{ std::copysign(1.0f, GetMouseWheelMove()) * (GetMouseWheelMove() != 0.0f) };
+                            const bool  canZoom{ (wheelSign && view.zoom > view.GetMinZoom()) || (!wheelSign && view.zoom < view.GetMaxZoom()) };
+                            if (wheel != 0 && canZoom)
+                                {
+                                    view.prevZoom = view.zoom;
+                                    const Vector2   mouse{ GetMousePosition() };
+                                    constexpr float ZOOM_STEP{ 0.12f };
 
-                            // Adjust zoom expotentially -> \frac{x^{2}}{m}\cdot\frac{n}{m}
-                            view.zoom += std::copysignf((std::pow(wheel * .6f, 2.f) / view.fitZoom) * (view.zoom / view.fitZoom), wheel);
-                            if (view.zoom < view.fitZoom / 2)
-                                view.zoom = view.fitZoom / 2;
-                            if (view.zoom > view.fitZoom * 10)
-                                view.zoom = view.fitZoom * 10;
+                                    // if (view.zoom < 1.f)
+                                    //     {
+                                    //         // view.zoom += wheel * 0.1f;
+                                    //         view.zoom += std::copysignf((std::pow(wheel * .5f, 3.f) / std::max(1.f, view.fitZoom)) * view.zoom / view.fitZoom, wheel);
+                                    //     }
+                                    // else
+                                    //     {
+                                    //         // Adjust zoom somewhat expotentially -> \frac{x^{2}}{m}\cdot\frac{n}{m}
+                                    //         view.zoom += std::copysignf((std::pow(wheel * .5f, 3.f) / view.fitZoom) * (view.zoom / view.fitZoom), wheel);
+                                    //     }
+                                    view.zoom = !wheelSign ? view.zoom * (1.f + ZOOM_STEP) : view.zoom * (1.f - ZOOM_STEP);
+                                    view.SafelyClampZoom();
 
-                            // zoom to cursor
-                            view.pan.x = mouse.x - (mouse.x - view.pan.x) * (view.zoom / view.prevZoom);
-                            view.pan.y = mouse.y - (mouse.y - view.pan.y) * (view.zoom / view.prevZoom);
+                                    Vector2 canvasPointUnderMouse;
+                                    canvasPointUnderMouse.x = (mouse.x - view.pan.x) / view.prevZoom;
+                                    canvasPointUnderMouse.y = (mouse.y - view.pan.y) / view.prevZoom;
+                                    view.pan.x              = mouse.x - canvasPointUnderMouse.x * view.zoom;
+                                    view.pan.y              = mouse.y - canvasPointUnderMouse.y * view.zoom;
+
+                                    view.SafelyClampPan(CANVAS_WIDTH, CANVAS_HEIGHT);
+                                }
                         }
-                }
+            }
+#pragma endregion Events
 
-            // -----------------------------------------------------
-            // Mouse UV editing (click+drag corners)
-            // -----------------------------------------------------
-            // if (imageLoaded && selectedSprite >= 0 && selectedFrame >= 0) {
-            //     Frame& f = sprites[selectedSprite].frames[selectedFrame];
-            //     Rectangle sr = ImageToScreenRect(f.uv);
-
-            //     Vector2 m = GetMousePosition();
-            //     const float handle = 8;
-
-            //     bool draggingTL = false, draggingBR = false;
-            //     static bool dragTL = false, dragBR = false;
-
-            //     if (CheckCollisionPointRec(m, {sr.x - handle, sr.y - handle, handle*2, handle*2})) {
-            //         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) dragTL = true;
-            //     }
-            //     if (CheckCollisionPointRec(m, {sr.x + sr.width - handle, sr.y + sr.height - handle, handle*2, handle*2})) {
-            //         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) dragBR = true;
-            //     }
-
-            //     if (dragTL && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            //         Vector2 im = {(m.x - pan.x) / zoom, (m.y - pan.y) / zoom};
-            //         f.uv.x = im.x / tex.width;
-            //         f.uv.y = im.y / tex.height;
-            //         f.uv.width = (sr.x + sr.width - m.x) / (tex.width * zoom);
-            //         f.uv.height = (sr.y + sr.height - m.y) / (tex.height * zoom);
-            //     }
-            //     if (dragBR && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            //         Vector2 im = {(m.x - pan.x) / zoom, (m.y - pan.y) / zoom};
-            //         f.uv.width = im.x / tex.width - f.uv.x;
-            //         f.uv.height = im.y / tex.height - f.uv.y;
-            //     }
-
-            //     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-            //         dragTL = dragBR = false;
-            //     }
-            // }
-
-            // -----------------------------------------------------
-            // Draw
-            // -----------------------------------------------------
+#pragma region Drawing
             BeginDrawing();
             ClearBackground(GRAY);
 
@@ -429,39 +425,36 @@ main()
 
             const bool hasValidSelectedAnimation{ ListState.activeIndex > -1 && !CP->ImmutableTransientAnimationNames.empty() && ListState.activeIndex < CP->ImmutableTransientAnimationNames.size() };
 
-            const int32_t CANVAS_WIDTH{ CP->SpriteTexture.has_value() ? CP->SpriteTexture->width : 1920 };
-            const int32_t CANVAS_HEIGHT{ CP->SpriteTexture.has_value() ? CP->SpriteTexture->height : 1080 };
-
             const Rectangle canvasRect{ view.pan.x, view.pan.y, CANVAS_WIDTH * view.zoom, CANVAS_HEIGHT * view.zoom };
 
-            // Draw sprite texture
+            // Draw sprite texture if has one
             if (CP->SpriteTexture.has_value())
                 {
-                    DrawTextureEx(CP->SpriteTexture.value(), to::Vector2_(view.pan), 0, view.zoom, WHITE);
-                    // Draw outline
-                    DrawRectangleLinesEx(canvasRect, 1.f, BLACK);
+                    DrawTextureEx(CP->SpriteTexture.value(), view.pan, 0, view.zoom, WHITE);
                 }
 
+            // Draw grid only if snapping is enabled
             if (app.SnapToGrid)
                 {
                     Vector2 gridMouseCell = { 0 };
                     GuiGrid(canvasRect, "Canvas", (app.GridSize * view.zoom), 1,
                     &gridMouseCell); // Draw a fancy grid
+
+                    // Draw outline
+                    DrawRectangleLinesEx(canvasRect, 1.f, BLACK);
                 }
 
-            // Draw canvas origin axis
+            // Draw canvas origin XY axis
             {
                 constexpr int32_t AXIS_LEN{ std::numeric_limits<int32_t>::max() };
-                DrawLineEx(to::Vector2_(view.pan), to::Vector2_({ AXIS_LEN, view.pan.y }), 2.f, RED);
-                DrawLineEx(to::Vector2_(view.pan), to::Vector2_({ view.pan.x, AXIS_LEN }), 2.f, GREEN);
+                DrawLineEx((view.pan), to::Vector2_({ AXIS_LEN, (int)view.pan.y }), 2.f, RED);
+                DrawLineEx((view.pan), to::Vector2_({ (int)view.pan.x, AXIS_LEN }), 2.f, GREEN);
             }
 
             // Draw the selected animation
             if (hasValidSelectedAnimation)
                 {
-                    // if (AnimationNameToSpritesheet.at(
-                    //	    ImmutableTransientAnimationNames
-                    //		    [ListState.activeIndex])))
+                    // Reset property panel pointer each frame
                     PropertyPanel = nullptr;
                     PropertyPanel = &CP->AnimationNameToSpritesheet.at(CP->ImmutableTransientAnimationNames[ListState.activeIndex]);
 
@@ -568,7 +561,6 @@ main()
                             spriteSheet.DeltaMousePos = mousePos;
                         }
                 }
-
 #pragma region GUI
 
             const char* animationNameOrPlaceholder{ !hasValidSelectedAnimation ? "No animation" : CP->ImmutableTransientAnimationNames[ListState.activeIndex] };
@@ -604,10 +596,11 @@ main()
 
                                     // Reset view
                                     {
-                                        view.pan = { 1, PAD * 2 + 30 };
-                                        // Set the zoom to fit the image on the max size
-                                        view.zoom    = ZoomFitIntoRect(CP->SpriteTexture->width, CP->SpriteTexture->height, { 0, 0, GetRenderWidth() - 400.f, GetRenderHeight() - 100.f });
-                                        view.fitZoom = view.zoom;
+                                        // Set the zoom to fit the new image on the max size
+                                        defaultView.fitZoom = view.ZoomFitIntoRect(
+                                        CP->SpriteTexture->width, CP->SpriteTexture->height, { 0, 0, GetRenderWidth() - VIEWPORT_GUI_RIGHT_PANEL_WIDTH, GetRenderHeight() - VIEWPORT_GUI_OCCLUSION_Y });
+                                        defaultView.zoom = defaultView.fitZoom;
+                                        ResetViewToDefault();
                                     }
                                 }
                             else
@@ -639,10 +632,7 @@ main()
                 const Rectangle fitViewRect{ TITLE_X_OFFSET, PAD, GetStringWidth("Fit view"), 30 };
                 if (GuiButton(fitViewRect, "Fit view"))
                     {
-                        // Reset view
-                        view.pan = { 1, PAD * 2 + 30 };
-                        // Set the zoom to fit the image on the max size
-                        view.zoom = ZoomFitIntoRect(CANVAS_WIDTH, CANVAS_HEIGHT, { 0, 0, GetRenderWidth() - 400.f, GetRenderHeight() - 100.f });
+                        ResetViewToDefault();
                     }
                 TITLE_X_OFFSET += fitViewRect.width + PAD;
             }
@@ -823,13 +813,11 @@ main()
                     }
             }
 
-#pragma endregion
-
-            // if (IsKeyPressed(KEY_E) && imageLoaded) {
-            //	ExportMetadata("spritesheet.png");
-            // }
+#pragma endregion GUI
 
             EndDrawing();
+
+#pragma endregion Drawing
         }
 
     return 0;
