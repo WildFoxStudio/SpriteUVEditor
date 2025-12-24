@@ -49,6 +49,7 @@ SOFTWARE.
  * \brief The GUI padding between elements.
  */
 constexpr int32_t PAD{ 10 };
+constexpr float   ZOOM_STEP{ 0.12f };
 constexpr int32_t VIEWPORT_GUI_RIGHT_PANEL_WIDTH{ 400 };
 constexpr int32_t VIEWPORT_GUI_OCCLUSION_Y{ 100 };
 constexpr int32_t DEFAULT_CANVAS_WIDTH{ 1920 };
@@ -297,9 +298,9 @@ DrawPropertiesIfValidPtr(Rectangle rect, AnimationData* p)
 // Selection list
 struct ListSelection
 {
-    int32_t scrollIndex{};
-    int32_t activeIndex{};
-    int32_t focusIndex{};
+    int32_t scrollIndex{ -1 };
+    int32_t activeIndex{ -1 };
+    int32_t focusIndex{ -1 };
     bool    ShowList{};
 };
 
@@ -307,8 +308,6 @@ ListSelection ListState{};
 
 Rectangle panelView   = { 0 };
 Vector2   panelScroll = { 0, 0 };
-
-AnimationData* PropertyPanel{};
 
 using ANIMATION_NAME_T = char[32 + 1];
 ANIMATION_NAME_T NewAnimationName{ "Animation_0" };
@@ -388,22 +387,11 @@ main()
                             if (wheel != 0 && canZoom)
                                 {
                                     view.prevZoom = view.zoom;
-                                    const Vector2   mouse{ GetMousePosition() };
-                                    constexpr float ZOOM_STEP{ 0.12f };
-
-                                    // if (view.zoom < 1.f)
-                                    //     {
-                                    //         // view.zoom += wheel * 0.1f;
-                                    //         view.zoom += std::copysignf((std::pow(wheel * .5f, 3.f) / std::max(1.f, view.fitZoom)) * view.zoom / view.fitZoom, wheel);
-                                    //     }
-                                    // else
-                                    //     {
-                                    //         // Adjust zoom somewhat expotentially -> \frac{x^{2}}{m}\cdot\frac{n}{m}
-                                    //         view.zoom += std::copysignf((std::pow(wheel * .5f, 3.f) / view.fitZoom) * (view.zoom / view.fitZoom), wheel);
-                                    //     }
+                                    const Vector2 mouse{ GetMousePosition() };
+                                    // Zoom
                                     view.zoom = !wheelSign ? view.zoom * (1.f + ZOOM_STEP) : view.zoom * (1.f - ZOOM_STEP);
                                     view.SafelyClampZoom();
-
+                                    // Adjust pan so that the point under the mouse remains under the mouse after zoom
                                     Vector2 canvasPointUnderMouse;
                                     canvasPointUnderMouse.x = (mouse.x - view.pan.x) / view.prevZoom;
                                     canvasPointUnderMouse.y = (mouse.y - view.pan.y) / view.prevZoom;
@@ -421,7 +409,7 @@ main()
             ClearBackground(GRAY);
 
             // Each frame rebuild the animation names vector
-            CP->RebuildAnimationNamesVector();
+            CP->RebuildAnimationNamesVectorAndRefreshPropertyPanel(ListState.activeIndex);
 
             const bool hasValidSelectedAnimation{ ListState.activeIndex > -1 && !CP->ImmutableTransientAnimationNames.empty() && ListState.activeIndex < CP->ImmutableTransientAnimationNames.size() };
 
@@ -454,10 +442,6 @@ main()
             // Draw the selected animation
             if (hasValidSelectedAnimation)
                 {
-                    // Reset property panel pointer each frame
-                    PropertyPanel = nullptr;
-                    PropertyPanel = &CP->AnimationNameToSpritesheet.at(CP->ImmutableTransientAnimationNames[ListState.activeIndex]);
-
                     auto& animationVariant = CP->AnimationNameToSpritesheet.at(CP->ImmutableTransientAnimationNames[ListState.activeIndex]);
                     if (std::holds_alternative<SpritesheetUv>(animationVariant.Data))
                         {
@@ -600,7 +584,11 @@ main()
                                         defaultView.fitZoom = view.ZoomFitIntoRect(
                                         CP->SpriteTexture->width, CP->SpriteTexture->height, { 0, 0, GetRenderWidth() - VIEWPORT_GUI_RIGHT_PANEL_WIDTH, GetRenderHeight() - VIEWPORT_GUI_OCCLUSION_Y });
                                         defaultView.zoom = defaultView.fitZoom;
+
                                         ResetViewToDefault();
+
+                                        // Reset selection
+                                        ListState = ListSelection{};
                                     }
                                 }
                             else
@@ -724,7 +712,7 @@ main()
                 // Draw properties only if selected
                 if (hasValidSelectedAnimation)
                     {
-                        DrawPropertiesIfValidPtr(Rectangle{ RIGHTPANEL_X + PAD, RIGHTPANEL_Y, RIGHTPANEL_W - PAD * 2.f, GetRenderHeight() - RIGHTPANEL_Y }, PropertyPanel);
+                        DrawPropertiesIfValidPtr(Rectangle{ RIGHTPANEL_X + PAD, RIGHTPANEL_Y, RIGHTPANEL_W - PAD * 2.f, GetRenderHeight() - RIGHTPANEL_Y }, CP->PropertyPanel);
                     }
             }
 
@@ -808,7 +796,7 @@ main()
 
                                 CP->AnimationNameToSpritesheet.erase(CP->ImmutableTransientAnimationNames[ListState.activeIndex]);
                                 ListState.activeIndex = -1;
-                                CP->RebuildAnimationNamesVector();
+                                CP->RebuildAnimationNamesVectorAndRefreshPropertyPanel(ListState.activeIndex);
                             }
                     }
             }

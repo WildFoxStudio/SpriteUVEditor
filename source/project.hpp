@@ -95,7 +95,7 @@ class Project
     bool LoadFromFile(const std::string& filePath);
 
     std::vector<const char*> ImmutableTransientAnimationNames{};
-    void                     RebuildAnimationNamesVector()
+    void                     RebuildAnimationNamesVectorAndRefreshPropertyPanel(int32_t activeIndex)
     {
         ImmutableTransientAnimationNames.clear();
         ImmutableTransientAnimationNames.reserve(AnimationNameToSpritesheet.size());
@@ -103,10 +103,16 @@ class Project
             {
                 ImmutableTransientAnimationNames.push_back(name.data());
             }
+
+        PropertyPanel = activeIndex <= 0 ? nullptr : &AnimationNameToSpritesheet.at(ImmutableTransientAnimationNames[activeIndex]);
     }
     std::string                          SpritePath{};
     std::optional<Texture2D>             SpriteTexture{};
     std::map<std::string, AnimationData> AnimationNameToSpritesheet{};
+    /**
+     * \brief The currently selected animation for property editing.
+     */
+    AnimationData* PropertyPanel{};
 
     bool HasUnsavedChanges();
 };
