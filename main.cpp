@@ -134,7 +134,7 @@ void
 RoundTo(T& value, int grid, bool round)
 {
     if (round)
-        value = std::round(value / grid) * grid;
+        value = std::round(value / std::max(1, grid)) * grid;
 }
 
 #pragma endregion Helpers
@@ -206,6 +206,7 @@ DrawSpritesheetUvProperties(Rectangle rect, SpritesheetUv& p)
 
             // Draw preview background
             DrawRectangleRec(previewRect, WHITE);
+            DrawRectangleLinesEx(previewRect, 1.f, DARKGRAY);
 
             const Vec2 uvOffset{ (p.CurrentFrameIndex.Value % p.Property_Columns.Value) * p.Uv.w, (p.CurrentFrameIndex.Value / p.Property_Columns.Value) * p.Uv.h };
 
@@ -213,20 +214,29 @@ DrawSpritesheetUvProperties(Rectangle rect, SpritesheetUv& p)
 
             const Vec2 uvBottomRight{ uvTopLeft.x + p.Uv.w, uvTopLeft.y + p.Uv.h };
 
+            DrawRectangleRec(spriteRect, GRAY);
+
+            const Vector2 uvScale{
+                static_cast<float>(CP->SpriteTexture->width),
+                static_cast<float>(CP->SpriteTexture->height),
+            };
+
             // Draw the UV rect
             rlSetTexture(CP->SpriteTexture->id);
+            // rlSetBlendMode(BLEND_ALPHA);
             rlBegin(RL_QUADS);
 
-            rlTexCoord2f(uvTopLeft.x / CP->SpriteTexture->width, uvTopLeft.y / CP->SpriteTexture->height);
+            rlTexCoord2f(uvTopLeft.x / uvScale.x, uvTopLeft.y / uvScale.y);
+            rlColor4f(1.f, 1.f, 1.f, 1.f);
             rlVertex2f(spriteRect.x, spriteRect.y);
 
-            rlTexCoord2f(uvTopLeft.x / CP->SpriteTexture->width, uvBottomRight.y / CP->SpriteTexture->height);
+            rlTexCoord2f(uvTopLeft.x / uvScale.x, uvBottomRight.y / uvScale.y);
             rlVertex2f(spriteRect.x, spriteRect.y + spriteRect.height);
 
-            rlTexCoord2f(uvBottomRight.x / CP->SpriteTexture->width, uvBottomRight.y / CP->SpriteTexture->height);
+            rlTexCoord2f(uvBottomRight.x / uvScale.x, uvBottomRight.y / uvScale.y);
             rlVertex2f(spriteRect.x + spriteRect.width, spriteRect.y + spriteRect.height);
 
-            rlTexCoord2f(uvBottomRight.x / CP->SpriteTexture->width, uvTopLeft.y / CP->SpriteTexture->height);
+            rlTexCoord2f(uvBottomRight.x / uvScale.x, uvTopLeft.y / uvScale.y);
             rlVertex2f(spriteRect.x + spriteRect.width, spriteRect.y);
 
             rlEnd();

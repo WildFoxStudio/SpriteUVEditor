@@ -104,7 +104,7 @@ class Project
                 ImmutableTransientAnimationNames.push_back(name.data());
             }
 
-        PropertyPanel = activeIndex <= 0 ? nullptr : &AnimationNameToSpritesheet.at(ImmutableTransientAnimationNames[activeIndex]);
+        PropertyPanel = activeIndex < 0 ? nullptr : &AnimationNameToSpritesheet.at(ImmutableTransientAnimationNames[activeIndex]);
     }
     std::string                          SpritePath{};
     std::optional<Texture2D>             SpriteTexture{};
