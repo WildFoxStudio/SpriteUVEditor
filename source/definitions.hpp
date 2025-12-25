@@ -24,6 +24,7 @@ SOFTWARE.
 
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 
 #include "geometry.hpp"
@@ -53,14 +54,26 @@ enum EControlIndex : int32_t
 
 struct View
 {
-    float   zoom{ 1.f };
-    float   prevZoom{ 1.f };
-    float   fitZoom{ 1.f };
-    Vector2 pan{};
+    constexpr static uint32_t ZOOM_FRACTBITS{ 8 };
+    constexpr static uint32_t ZOOM_FRACT{ 1 << ZOOM_FRACTBITS };
+    uint32_t                  zoom{ 1u + ZOOM_FRACT };
+    uint32_t                  prevZoom{ zoom };
+    float                     fitZoom{ 1.f };
+    Vector2                   pan{};
 
-    Vector2      GetZoomedPan() const { return Vector2{ pan.x * zoom, pan.y * zoom }; }
-    inline float GetMinZoom() const { return fitZoom * .25f; };
-    inline float GetMaxZoom() const { return fitZoom * 1000.f; };
+    Vector2                GetZoomedPan() const { return Vector2{ pan.x * zoom, pan.y * zoom }; }
+    inline uint32_t        GetMinZoom() const { return ToFixed(fitZoom * 0.1f); };
+    inline uint32_t        GetMaxZoom() const { return ToFixed(fitZoom * 100); };
+    inline float           GetZoomFactor() const { return static_cast<float>(zoom) / static_cast<float>(ZOOM_FRACT); }
+    inline float           GetPrevZoomFactor() const { return static_cast<float>(prevZoom) / static_cast<float>(ZOOM_FRACT); }
+    inline void            SetZoomFactor(float value) { zoom = static_cast<uint32_t>(std::round(value * ZOOM_FRACT)); }
+    inline static uint32_t ToFixed(float value) { return static_cast<uint32_t>(std::round(value * ZOOM_FRACT)); }
+    inline static int32_t  MultiplyFixed(int32_t a, int32_t b) { return (int32_t)(((int64_t)a * b) >> ZOOM_FRACTBITS); }
+    inline static uint32_t DivideFixed(uint32_t a, uint32_t b)
+    {
+        // We cast to uint64_t to prevent overflow during the multiplication
+        return (uint32_t)(((uint64_t)a * ZOOM_FRACT) / b);
+    }
 
     inline void SafelyClampZoom() { zoom = std::clamp(zoom, GetMinZoom(), GetMaxZoom()); }
 

@@ -49,7 +49,7 @@ SOFTWARE.
  * \brief The GUI padding between elements.
  */
 constexpr int32_t PAD{ 10 };
-constexpr float   ZOOM_STEP{ 0.12f };
+constexpr float   ZOOM_STEP{ .1f };
 constexpr int32_t VIEWPORT_GUI_RIGHT_PANEL_WIDTH{ 400 };
 constexpr int32_t VIEWPORT_GUI_OCCLUSION_Y{ 100 };
 constexpr int32_t DEFAULT_CANVAS_WIDTH{ 1920 };
@@ -360,7 +360,7 @@ main()
         defaultView.pan = { 1, PAD * 2 + 30 };
         defaultView.fitZoom =
         View::ZoomFitIntoRect(DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT, { 0, 0, GetRenderWidth() - VIEWPORT_GUI_RIGHT_PANEL_WIDTH, GetRenderHeight() - VIEWPORT_GUI_OCCLUSION_Y });
-        defaultView.zoom = view.fitZoom;
+        defaultView.SetZoomFactor(defaultView.fitZoom);
         assert(defaultView.fitZoom > 0.f);
     }
 
@@ -384,8 +384,8 @@ main()
                 if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
                     {
                         Vector2 d{ GetMouseDelta() };
-                        view.pan.x += d.x * (1.f / view.zoom);
-                        view.pan.y += d.y * (1.f / view.zoom);
+                        view.pan.x += d.x; // * (1.f / view.GetZoomFactor());
+                        view.pan.y += d.y; // * (1.f / view.GetZoomFactor());
                         std::cout << "Pan:" << view.pan.x << " " << view.pan.y << std::endl;
                     }
                 else
@@ -393,10 +393,18 @@ main()
                     if (!ListState.ShowList)
                         {
                             const Vector2 mouse{ GetMousePosition() };
-                            const auto    deltaZoom{ view.zoom };
+                            auto          deltaZoom{ view.GetZoomFactor() };
                             Vector2       worldPoint{};
-                            worldPoint.x = (mouse.x - view.pan.x * deltaZoom) / deltaZoom;
-                            worldPoint.y = (mouse.y - view.pan.y * deltaZoom) / deltaZoom;
+                            worldPoint.x = (mouse.x - view.pan.x) / deltaZoom;
+                            worldPoint.y = (mouse.y - view.pan.y) / deltaZoom;
+                            // std::cout << "WorldMouse:" << worldPoint.x << " " << worldPoint.y << std::endl;
+                            if (IsKeyPressed(KEY_R))
+                                {
+                                    volatile int foo{};
+                                    ++foo;
+                                }
+
+                            Vector2 worldPan{ view.pan.x * deltaZoom / deltaZoom, view.pan.y * deltaZoom / deltaZoom };
 
                             const auto  wheelSign{ std::signbit(GetMouseWheelMove()) };
                             const float wheel{ std::copysign(1.0f, GetMouseWheelMove()) * (GetMouseWheelMove() != 0.0f) };
@@ -405,23 +413,25 @@ main()
                                 {
 
                                     // Zoom
-                                    view.zoom = !wheelSign ? view.zoom * (1.f + ZOOM_STEP) : view.zoom * (1.f - ZOOM_STEP);
+                                    view.prevZoom = view.zoom;
+                                    view.zoom     = !wheelSign ? view.zoom + View::ToFixed(ZOOM_STEP * view.GetPrevZoomFactor()) : view.zoom - View::ToFixed(ZOOM_STEP * view.GetPrevZoomFactor());
                                     view.SafelyClampZoom();
                                     // Adjust pan so that the point under the mouse remains under the mouse after zoom
                                     // PAN NOT WORKING WIP TODO FIX IT
-                                    view.pan.x = mouse.x - worldPoint.x * view.zoom;
-                                    view.pan.y = mouse.y - worldPoint.y * view.zoom;
+                                    // view.pan.x = worldPoint.x - mouse.x; // (view.GetPrevZoomFactor() - view.GetZoomFactor());
+                                    // view.pan.y = worldPoint.y - mouse.x; // (view.GetPrevZoomFactor() - view.GetZoomFactor());
 
                                     view.SafelyClampPan(CANVAS_WIDTH, CANVAS_HEIGHT);
 
-                                    std::cout << "Zoom:" << view.zoom << " prev:" << view.prevZoom << std::endl;
+                                    std::cout << "Zoom:" << view.GetZoomFactor() << " prev:" << view.GetPrevZoomFactor() << std::endl;
                                     std::cout << "WorldMouse:" << worldPoint.x << " " << worldPoint.y << std::endl;
+                                    std::cout << "World Pan:" << worldPan.x << " " << worldPan.y << std::endl;
                                     std::cout << "Pan:" << view.pan.x << " " << view.pan.y << std::endl;
-
+                                    deltaZoom    = view.zoom;
                                     worldPoint.x = (mouse.x - view.pan.x * deltaZoom) / deltaZoom;
                                     worldPoint.y = (mouse.y - view.pan.y * deltaZoom) / deltaZoom;
                                     std::cout << "WorldMouse:" << worldPoint.x << " " << worldPoint.y << std::endl;
-                                    view.prevZoom = view.zoom;
+                                    std::cout << "=================================================== " << std::endl;
                                 }
                         }
             }
@@ -441,14 +451,14 @@ main()
             // Draw sprite texture if has one
             if (CP->SpriteTexture.has_value())
                 {
-                    DrawTextureEx(CP->SpriteTexture.value(), view.pan, 0, view.zoom, WHITE);
+                    DrawTextureEx(CP->SpriteTexture.value(), view.pan, 0, view.GetZoomFactor(), WHITE);
                 }
 
             // Draw grid only if snapping is enabled
             if (app.SnapToGrid)
                 {
                     Vector2 gridMouseCell = { 0 };
-                    GuiGrid(canvasRect, "Canvas", (app.GridSize * view.zoom), 1,
+                    GuiGrid(canvasRect, "Canvas", (app.GridSize * view.GetZoomFactor()), 1,
                     &gridMouseCell); // Draw a fancy grid
 
                     // Draw outline
@@ -603,7 +613,7 @@ main()
                                         // Set the zoom to fit the new image on the max size
                                         defaultView.fitZoom = view.ZoomFitIntoRect(
                                         CP->SpriteTexture->width, CP->SpriteTexture->height, { 0, 0, GetRenderWidth() - VIEWPORT_GUI_RIGHT_PANEL_WIDTH, GetRenderHeight() - VIEWPORT_GUI_OCCLUSION_Y });
-                                        defaultView.zoom = defaultView.fitZoom;
+                                        defaultView.SetZoomFactor(defaultView.fitZoom);
 
                                         ResetViewToDefault();
 
