@@ -41,6 +41,7 @@ class App final
     bool                       SnapToGrid{ true };
     std::string                ImagePath{};
     std::optional<std::string> LastError{};
+    Texture2D                  CheckerBoardTexture{};
 
     App(int32_t width, int32_t height, const char* title);
     ~App();

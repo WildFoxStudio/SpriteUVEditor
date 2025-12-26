@@ -480,6 +480,14 @@ main()
             const float     zoomFactor = view.GetZoomFactor();
             const Rectangle canvasRect{ view.pan.x, view.pan.y, CANVAS_WIDTH * zoomFactor, CANVAS_HEIGHT * zoomFactor };
 
+            // Draw checkered background
+            if (app.CheckerBoardTexture.id)
+                {
+                    // DrawTextureEx(app.CheckerBoardTexture, to::Vector2_(view.pan), 0, zoomFactor, WHITE);
+                    SetTextureWrap(app.CheckerBoardTexture, TEXTURE_WRAP_REPEAT);
+                    DrawTexturePro(app.CheckerBoardTexture, canvasRect, canvasRect, {}, 0, WHITE);
+                }
+
             // Draw sprite texture if has one
             if (CP->SpriteTexture.has_value())
                 {

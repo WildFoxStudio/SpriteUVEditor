@@ -40,6 +40,15 @@ App::App(int32_t width, int32_t height, const char* title)
         {
             std::cout << "Failed to load Roboto font, falling back to default font." << std::endl;
         }
+
+    // Create the checkerboard texture
+    const int32_t CHECKER_SIZE{ 16 };
+    Image         checkerImage = GenImageChecked(CHECKER_SIZE * 2, CHECKER_SIZE * 2, CHECKER_SIZE, CHECKER_SIZE, LIGHTGRAY, DARKGRAY);
+    CheckerBoardTexture        = LoadTextureFromImage(checkerImage);
+    if (CheckerBoardTexture.id == 0)
+        {
+            std::cout << "Failed to create checkerboard texture!" << std::endl;
+        }
 }
 
 App::~App()
@@ -47,6 +56,10 @@ App::~App()
     if (fontRoboto.texture.id)
         {
             UnloadFont(fontRoboto);
+        }
+    if (CheckerBoardTexture.id)
+        {
+            UnloadTexture(CheckerBoardTexture);
         }
     CloseWindow();
 }
