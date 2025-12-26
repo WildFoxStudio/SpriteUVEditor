@@ -36,6 +36,7 @@ SOFTWARE.
 #include "project.hpp"
 
 #include <cassert>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -380,60 +381,89 @@ main()
                         view.ZoomFitIntoRect(CANVAS_WIDTH, CANVAS_HEIGHT, { 0, 0, GetRenderWidth() - VIEWPORT_GUI_RIGHT_PANEL_WIDTH, GetRenderHeight() - VIEWPORT_GUI_OCCLUSION_Y });
                     }
 
-                // Mouse panning
+                // Mouse panning (middle button)
                 if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
                     {
-                        Vector2 d{ GetMouseDelta() };
-                        view.pan.x += d.x; // * (1.f / view.GetZoomFactor());
-                        view.pan.y += d.y; // * (1.f / view.GetZoomFactor());
-                        std::cout << "Pan:" << view.pan.x << " " << view.pan.y << std::endl;
+                        // GetMouseDelta returns movement in screen space; pan is in screen space too.
+                        const Vector2 d = GetMouseDelta();
+                        view.pan.x += d.x;
+                        view.pan.y += d.y;
+                        view.SafelyClampPan();
                     }
-                else
-                    // Mouse wheel zoom
-                    if (!ListState.ShowList)
-                        {
-                            const Vector2 mouse{ GetMousePosition() };
-                            auto          deltaZoom{ view.GetZoomFactor() };
-                            Vector2       worldPoint{};
-                            worldPoint.x = (mouse.x - view.pan.x) / deltaZoom;
-                            worldPoint.y = (mouse.y - view.pan.y) / deltaZoom;
-                            // std::cout << "WorldMouse:" << worldPoint.x << " " << worldPoint.y << std::endl;
-                            if (IsKeyPressed(KEY_R))
+                else if (!ListState.ShowList) // Mouse wheel zoom (when list not shown)
+                    {
+                        const float wheelMove = GetMouseWheelMove();
+                        if (wheelMove != 0.0f)
+                            {
+                                // Current mouse position in screen coords
+                                const Vector2 mouse = GetMousePosition();
+
+                                // Zoom factor before change
+                                const float prevZoomFactor = view.GetZoomFactor();
+                                // Compute world position under the mouse BEFORE zoom change:
+                                // world = (mouse - pan) / zoom
+                                const Vector2 worldBefore = {
+                                    (mouse.x - view.pan.x) / prevZoomFactor,
+                                    (mouse.y - view.pan.y) / prevZoomFactor,
+                                };
+
+                                // Compute new zoom factor.
+                                const float scale         = 1.0f + wheelMove * ZOOM_STEP;
+                                float       newZoomFactor = prevZoomFactor * scale;
+                                // Clamp to allowed zoom range
+                                newZoomFactor = std::clamp(newZoomFactor, view.GetMinZoom() / static_cast<float>(View::ZOOM_FRACT), view.GetMaxZoom() / static_cast<float>(View::ZOOM_FRACT));
+                                if (newZoomFactor <= 0.0f)
+                                    newZoomFactor = prevZoomFactor; // safety
+
+                                // Apply new zoom using view helper
+                                view.SetZoomFactor(newZoomFactor);
+                                view.SafelyClampZoom();
+
+                                // After zoom change, adjust pan so the world point under the mouse stays the same:
+                                // newPan = mouse - worldBefore * appliedZoom
+                                const float appliedZoom = view.GetZoomFactor();
+                                view.pan.x              = mouse.x - worldBefore.x * appliedZoom;
+                                view.pan.y              = mouse.y - worldBefore.y * appliedZoom;
+
+                                // Custom clamping using appliedZoom and actual viewport region
                                 {
-                                    volatile int foo{};
-                                    ++foo;
+                                    // Viewport area for the canvas (exclude right panel and top toolbar/occlusion)
+                                    const float viewportX = 0.f;
+                                    const float viewportY = defaultView.pan.y; // keep top offset consistent with default
+                                    const float viewportW = static_cast<float>(GetRenderWidth() - VIEWPORT_GUI_RIGHT_PANEL_WIDTH);
+                                    const float viewportH = static_cast<float>(GetRenderHeight() - VIEWPORT_GUI_OCCLUSION_Y - viewportY);
+
+                                    const float canvasScaledW = CANVAS_WIDTH * appliedZoom;
+                                    const float canvasScaledH = CANVAS_HEIGHT * appliedZoom;
+
+                                    // Horizontal clamp: clamp pan into allowed interval instead of forcing center
+                                    {
+                                        const float maxPanX = viewportX; // leftmost allowed pan (canvas left == viewport left)
+                                        const float minPanX = viewportX + (viewportW - canvasScaledW); // rightmost allowed pan (canvas right == viewport right)
+                                        // If canvasScaledW <= viewportW, minPanX may be > maxPanX; std::min/max handle ordering in clamp below.
+                                        const float loX = std::min(minPanX, maxPanX);
+                                        const float hiX = std::max(minPanX, maxPanX);
+                                        view.pan.x      = view.pan.x;
+                                    }
+
+                                    // Vertical clamp: clamp pan into allowed interval instead of forcing center
+                                    {
+                                        const float maxPanY = viewportY; // topmost allowed pan
+                                        const float minPanY = viewportY + (viewportH - canvasScaledH); // bottommost allowed pan
+                                        const float loY     = std::min(minPanY, maxPanY);
+                                        const float hiY     = std::max(minPanY, maxPanY);
+                                        view.pan.y          = view.pan.y;
+                                    }
+                                    view.SafelyClampPan();
                                 }
 
-                            Vector2 worldPan{ view.pan.x * deltaZoom / deltaZoom, view.pan.y * deltaZoom / deltaZoom };
+                                // Keep prevZoom consistent for subsequent mouse/drag calculations
+                                view.prevZoom = view.zoom;
 
-                            const auto  wheelSign{ std::signbit(GetMouseWheelMove()) };
-                            const float wheel{ std::copysign(1.0f, GetMouseWheelMove()) * (GetMouseWheelMove() != 0.0f) };
-                            const bool  canZoom{ (wheelSign && view.zoom > view.GetMinZoom()) || (!wheelSign && view.zoom < view.GetMaxZoom()) };
-                            if (wheel != 0 && canZoom)
-                                {
-
-                                    // Zoom
-                                    view.prevZoom = view.zoom;
-                                    view.zoom     = !wheelSign ? view.zoom + View::ToFixed(ZOOM_STEP * view.GetPrevZoomFactor()) : view.zoom - View::ToFixed(ZOOM_STEP * view.GetPrevZoomFactor());
-                                    view.SafelyClampZoom();
-                                    // Adjust pan so that the point under the mouse remains under the mouse after zoom
-                                    // PAN NOT WORKING WIP TODO FIX IT
-                                    // view.pan.x = worldPoint.x - mouse.x; // (view.GetPrevZoomFactor() - view.GetZoomFactor());
-                                    // view.pan.y = worldPoint.y - mouse.x; // (view.GetPrevZoomFactor() - view.GetZoomFactor());
-
-                                    view.SafelyClampPan(CANVAS_WIDTH, CANVAS_HEIGHT);
-
-                                    std::cout << "Zoom:" << view.GetZoomFactor() << " prev:" << view.GetPrevZoomFactor() << std::endl;
-                                    std::cout << "WorldMouse:" << worldPoint.x << " " << worldPoint.y << std::endl;
-                                    std::cout << "World Pan:" << worldPan.x << " " << worldPan.y << std::endl;
-                                    std::cout << "Pan:" << view.pan.x << " " << view.pan.y << std::endl;
-                                    deltaZoom    = view.zoom;
-                                    worldPoint.x = (mouse.x - view.pan.x * deltaZoom) / deltaZoom;
-                                    worldPoint.y = (mouse.y - view.pan.y * deltaZoom) / deltaZoom;
-                                    std::cout << "WorldMouse:" << worldPoint.x << " " << worldPoint.y << std::endl;
-                                    std::cout << "=================================================== " << std::endl;
-                                }
-                        }
+                                // Optional debug:
+                                // std::cout << "Zoom:" << appliedZoom << " prev:" << prevZoomFactor << std::endl;
+                            }
+                    }
             }
 #pragma endregion Events
 
@@ -446,19 +476,21 @@ main()
 
             const bool hasValidSelectedAnimation{ ListState.activeIndex > -1 && !CP->ImmutableTransientAnimationNames.empty() && ListState.activeIndex < CP->ImmutableTransientAnimationNames.size() };
 
-            const Rectangle canvasRect{ view.pan.x * view.zoom, view.pan.y * view.zoom, CANVAS_WIDTH * view.zoom, CANVAS_HEIGHT * view.zoom };
+            // Use view.pan (screen coords) and GetZoomFactor() (float) to avoid uint32_t -> float conversions and drift.
+            const float     zoomFactor = view.GetZoomFactor();
+            const Rectangle canvasRect{ view.pan.x, view.pan.y, CANVAS_WIDTH * zoomFactor, CANVAS_HEIGHT * zoomFactor };
 
             // Draw sprite texture if has one
             if (CP->SpriteTexture.has_value())
                 {
-                    DrawTextureEx(CP->SpriteTexture.value(), view.pan, 0, view.GetZoomFactor(), WHITE);
+                    DrawTextureEx(CP->SpriteTexture.value(), to::Vector2_(view.pan), 0, zoomFactor, WHITE);
                 }
 
             // Draw grid only if snapping is enabled
             if (app.SnapToGrid)
                 {
                     Vector2 gridMouseCell = { 0 };
-                    GuiGrid(canvasRect, "Canvas", (app.GridSize * view.GetZoomFactor()), 1,
+                    GuiGrid(canvasRect, "Canvas", (app.GridSize * zoomFactor), 1,
                     &gridMouseCell); // Draw a fancy grid
 
                     // Draw outline
@@ -523,8 +555,9 @@ main()
                             Vec2 mousePos{};
                             {
                                 auto rayMousePos{ GetMousePosition() };
-                                rayMousePos.x = (rayMousePos.x * (1.f / view.zoom)) - view.pan.x;
-                                rayMousePos.y = (rayMousePos.y * (1.f / view.zoom)) - view.pan.y;
+                                // Correct mapping: image = (screen - pan) / zoomFactor
+                                rayMousePos.x = (rayMousePos.x - view.pan.x) / zoomFactor;
+                                rayMousePos.y = (rayMousePos.y - view.pan.y) / zoomFactor;
                                 mousePos      = from::Vector2_(rayMousePos);
                             }
 
@@ -731,7 +764,6 @@ main()
             // Draw error string messagebox
             if (app.LastError.has_value())
                 {
-                    // DrawText(LastError->c_str(), 220, 20, 16, RED);
                     const auto result = GuiMessageBox(Rectangle{ 0, 0, (float)GetRenderWidth(), (float)GetRenderHeight() }, "Error", app.LastError->c_str(), "OK");
                     if (result > 0)
                         {

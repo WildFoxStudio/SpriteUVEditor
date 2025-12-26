@@ -56,12 +56,14 @@ struct View
 {
     constexpr static uint32_t ZOOM_FRACTBITS{ 8 };
     constexpr static uint32_t ZOOM_FRACT{ 1 << ZOOM_FRACTBITS };
-    uint32_t                  zoom{ 1u + ZOOM_FRACT };
-    uint32_t                  prevZoom{ zoom };
-    float                     fitZoom{ 1.f };
-    Vector2                   pan{};
+    /*Fixed point float*/
+    uint32_t zoom{ 1u + ZOOM_FRACT };
+    /*Fixed point float*/
+    uint32_t prevZoom{ zoom };
+    float    fitZoom{ 1.f };
+    Vec2     pan{};
 
-    Vector2                GetZoomedPan() const { return Vector2{ pan.x * zoom, pan.y * zoom }; }
+    Vector2                GetZoomedPan() const { return Vector2{ pan.x * GetZoomFactor(), pan.y * GetZoomFactor() }; }
     inline uint32_t        GetMinZoom() const { return ToFixed(fitZoom * 0.1f); };
     inline uint32_t        GetMaxZoom() const { return ToFixed(fitZoom * 100); };
     inline float           GetZoomFactor() const { return static_cast<float>(zoom) / static_cast<float>(ZOOM_FRACT); }
@@ -77,10 +79,10 @@ struct View
 
     inline void SafelyClampZoom() { zoom = std::clamp(zoom, GetMinZoom(), GetMaxZoom()); }
 
-    inline void SafelyClampPan(const int32_t canvasW, const int32_t canvasH)
+    inline void SafelyClampPan()
     {
-        pan.x = std::clamp(pan.x, -canvasW / 2.f, canvasH * 2.f);
-        pan.y = std::clamp(pan.y, -canvasW / 2.f, canvasH * 2.f);
+        pan.x = std::clamp(pan.x, -std::numeric_limits<int16_t>::max(), +std::numeric_limits<int16_t>::max());
+        pan.y = std::clamp(pan.y, -std::numeric_limits<int16_t>::max(), +std::numeric_limits<int16_t>::max());
     }
 
     inline Rectangle TransformRect(const Rectangle& rect) const
