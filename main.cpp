@@ -500,8 +500,8 @@ main()
             // Draw canvas origin XY axis
             {
                 constexpr int32_t AXIS_LEN{ std::numeric_limits<int32_t>::max() };
-                DrawLineEx((view.GetZoomedPan()), to::Vector2_({ AXIS_LEN, (int)view.pan.y }), 2.f, RED);
-                DrawLineEx((view.GetZoomedPan()), to::Vector2_({ (int)view.pan.x, AXIS_LEN }), 2.f, GREEN);
+                DrawLineEx(to::Vector2_(view.pan), to::Vector2_({ AXIS_LEN, (int)view.pan.y }), 2.f, RED);
+                DrawLineEx(to::Vector2_(view.pan), to::Vector2_({ (int)view.pan.x, AXIS_LEN }), 2.f, GREEN);
             }
 
             // Draw the selected animation
