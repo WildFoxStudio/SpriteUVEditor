@@ -35,6 +35,17 @@ App::App(int32_t width, int32_t height, const char* title)
 
     SetTargetFPS(GetMonitorRefreshRate(0));
 
+    Image icon = LoadImage("icons/uvEdit.png");
+    if (icon.data)
+        {
+            SetWindowIcon(icon);
+            UnloadImage(icon);
+        }
+    else
+        {
+            std::cout << "Failed to load window icon!" << std::endl;
+        }
+
     fontRoboto = LoadFontEx("fonts/Roboto-Bold.ttf", 16, nullptr, 250);
     if (!fontRoboto.texture.id)
         {
