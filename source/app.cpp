@@ -43,7 +43,7 @@ App::App(int32_t width, int32_t height, const char* title)
 
     // Create the checkerboard texture
     const int32_t CHECKER_SIZE{ 16 };
-    Image         checkerImage = GenImageChecked(CHECKER_SIZE * 2, CHECKER_SIZE * 2, CHECKER_SIZE, CHECKER_SIZE, LIGHTGRAY, DARKGRAY);
+    Image         checkerImage = GenImageChecked(CHECKER_SIZE * 2, CHECKER_SIZE * 2, CHECKER_SIZE, CHECKER_SIZE, Color{ 130, 130, 130, 255 }, Color{ 160, 160, 160, 255 });
     CheckerBoardTexture        = LoadTextureFromImage(checkerImage);
     if (CheckerBoardTexture.id == 0)
         {

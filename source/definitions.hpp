@@ -87,11 +87,12 @@ struct View
 
     inline Rectangle TransformRect(const Rectangle& rect) const
     {
-        Rectangle transformedRect{};
-        transformedRect.x      = rect.x * zoom + pan.x;
-        transformedRect.y      = rect.y * zoom + pan.y;
-        transformedRect.width  = rect.width * zoom;
-        transformedRect.height = rect.height * zoom;
+        const auto z{ GetZoomFactor() };
+        Rectangle  transformedRect{};
+        transformedRect.x      = rect.x * z + pan.x;
+        transformedRect.y      = rect.y * z + pan.y;
+        transformedRect.width  = rect.width * z;
+        transformedRect.height = rect.height * z;
         return transformedRect;
     }
 

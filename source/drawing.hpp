@@ -60,8 +60,8 @@ DrawUVRectDashed(Rectangle rect, View view)
     constexpr Color dashColor{ DARKBLUE };
     rect = view.TransformRect(rect);
 
-    constexpr float baseThickness{ 2.8f };
-    constexpr float dashLen{ 10 * baseThickness };
+    constexpr float baseThickness{ 5.8f };
+    constexpr float dashLen{ 2 * baseThickness };
     constexpr float dashGap{ 2 * baseThickness };
     const auto      thickness{ baseThickness * view.fitZoom };
 

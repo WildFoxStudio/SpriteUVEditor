@@ -148,36 +148,36 @@ DrawSpritesheetUvProperties(Rectangle rect, SpritesheetUv& p)
     // Draw UV Rect
     {
         p.Property_Rect[0].Value = p.Uv.x;
-        (void)(NumericBox(rect, "X:", &p.Property_Rect[0].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[0].ActiveBox));
+        (void)(NumericBox(rect, "X: ", &p.Property_Rect[0].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[0].ActiveBox));
         p.Uv.x = static_cast<float>(p.Property_Rect[0].Value);
         rect.y += 30 + PAD;
         p.Property_Rect[1].Value = p.Uv.y;
-        (void)(NumericBox(rect, "Y:", &p.Property_Rect[1].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[1].ActiveBox));
+        (void)(NumericBox(rect, "Y: ", &p.Property_Rect[1].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[1].ActiveBox));
         p.Uv.y = static_cast<float>(p.Property_Rect[1].Value);
         rect.y += 30 + PAD;
         p.Property_Rect[2].Value = p.Uv.w;
-        (void)(NumericBox(rect, "Width:", &p.Property_Rect[2].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[2].ActiveBox));
+        (void)(NumericBox(rect, "Width: ", &p.Property_Rect[2].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[2].ActiveBox));
         p.Uv.w = static_cast<float>(p.Property_Rect[2].Value);
         rect.y += 30 + PAD;
         p.Property_Rect[3].Value = p.Uv.h;
-        (void)(NumericBox(rect, "Height:", &p.Property_Rect[3].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[3].ActiveBox));
+        (void)(NumericBox(rect, "Height: ", &p.Property_Rect[3].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[3].ActiveBox));
         p.Uv.h = static_cast<float>(p.Property_Rect[3].Value);
         rect.y += 30 + PAD;
     }
 
     // Num of frames
-    (void)(NumericBox(rect, "Frames:", &p.Property_NumOfFrames.Value, 1, 8196, p.Property_NumOfFrames.ActiveBox));
+    (void)(NumericBox(rect, "Frames: ", &p.Property_NumOfFrames.Value, 1, 8196, p.Property_NumOfFrames.ActiveBox));
 
     rect.y += 30 + PAD;
 
     // Wrap around
-    (void)(NumericBox(rect, "Columns:", &p.Property_Columns.Value, 1, 8196, p.Property_Columns.ActiveBox));
+    (void)(NumericBox(rect, "Columns: ", &p.Property_Columns.Value, 1, 8196, p.Property_Columns.ActiveBox));
     // Clamp to at least 1 column
     p.Property_Columns.Value = std::max(p.Property_Columns.Value, 1);
     rect.y += 30 + PAD;
 
     // Frame duration
-    (void)(NumericBox(rect, "Frame duration ms:", &p.Property_FrameDurationMs.Value, 0, INT32_MAX, p.Property_FrameDurationMs.ActiveBox));
+    (void)(NumericBox(rect, "Frame duration ms: ", &p.Property_FrameDurationMs.Value, 0, INT32_MAX, p.Property_FrameDurationMs.ActiveBox));
     rect.y += 30 + PAD;
 
     if (CP->SpriteTexture.has_value())
@@ -532,7 +532,7 @@ main()
                     const float gridSize{ app.GridSize * zoomFactor };
 
                     // Fade the alpha based on zoom level
-                    const auto alpha{ static_cast<uint8_t>(std::clamp((zoomFactor - 0.5f) / 2.f * 255.f, 0.f, 255.f)) };
+                    const auto alpha{ static_cast<uint8_t>(std::clamp((std::max(CANVAS_WIDTH, CANVAS_HEIGHT) * zoomFactor) / std::max(CANVAS_WIDTH, CANVAS_HEIGHT) * 255.f, 0.f, 255.f)) };
                     if (alpha > 0)
                         {
                             Color col{ WHITE };
