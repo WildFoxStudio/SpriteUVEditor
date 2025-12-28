@@ -80,6 +80,7 @@ add_executable(sprite_uv_editor main.cpp source/definitions.hpp source/app.hpp s
 target_sources(sprite_uv_editor PRIVATE 
     source/app.cpp 
     source/project.cpp
+    sprite_uv_editor.rc
 )
 
 target_link_libraries(sprite_uv_editor PRIVATE 
