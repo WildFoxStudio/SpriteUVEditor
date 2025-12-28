@@ -346,6 +346,33 @@ ImageToScreenRect(const Rectangle& r)
         r.height * CP->SpriteTexture->height * view.zoom };
 }
 
+void
+DrawGrid(Rectangle bounds, int32_t subdivs, int32_t spacing, Color color)
+{
+    const float   thickness{ 4.f };
+    const float   alpha      = 1.f;
+    const float   spaceWidth = spacing / (float)subdivs;
+    const int32_t linesV     = (int)(bounds.width / spaceWidth) + 1;
+    const int32_t linesH     = (int)(bounds.height / spaceWidth) + 1;
+
+    if (subdivs > 0)
+        {
+            // Draw vertical grid lines
+            for (int32_t i = 0; i < linesV; i++)
+                {
+                    const Rectangle lineV{ bounds.x + spacing * i / subdivs, bounds.y, ((i % subdivs) == 0) ? thickness : thickness * .25f, bounds.height };
+                    GuiDrawRectangle(lineV, 0, BLANK, ((i % subdivs) == 0) ? GuiFade(color, alpha) : GuiFade(color, alpha));
+                }
+
+            // Draw horizontal grid lines
+            for (int32_t i = 0; i < linesH; i++)
+                {
+                    const Rectangle lineH{ bounds.x, bounds.y + spacing * i / subdivs, bounds.width, ((i % subdivs) == 0) ? thickness : thickness * .25f };
+                    GuiDrawRectangle(lineH, 0, BLANK, ((i % subdivs) == 0) ? GuiFade(color, alpha) : GuiFade(color, alpha));
+                }
+        }
+}
+
 int
 main()
 {
@@ -497,9 +524,7 @@ main()
             // Draw grid only if snapping is enabled
             if (app.SnapToGrid)
                 {
-                    Vector2 gridMouseCell = { 0 };
-                    GuiGrid(canvasRect, "Canvas", (app.GridSize * zoomFactor), 1,
-                    &gridMouseCell); // Draw a fancy grid
+                    DrawGrid(canvasRect, 4, static_cast<int32_t>(app.GridSize * zoomFactor), WHITE);
 
                     // Draw outline
                     DrawRectangleLinesEx(canvasRect, 1.f, BLACK);
