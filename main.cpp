@@ -347,29 +347,27 @@ ImageToScreenRect(const Rectangle& r)
 }
 
 void
-DrawGrid(Rectangle bounds, int32_t subdivs, int32_t spacing, Color color)
+DrawGrid(Rectangle bounds, float spacing, Color color)
 {
-    const float   thickness{ 4.f };
-    const float   alpha      = 1.f;
-    const float   spaceWidth = spacing / (float)subdivs;
-    const int32_t linesV     = (int)(bounds.width / spaceWidth) + 1;
-    const int32_t linesH     = (int)(bounds.height / spaceWidth) + 1;
+    constexpr float thickness{ 1.f };
+    const float     spaceWidth = spacing;
+    const int32_t   linesV     = (int32_t)(bounds.width / spaceWidth) + 1;
+    const int32_t   linesH     = (int32_t)(bounds.height / spaceWidth) + 1;
 
-    if (subdivs > 0)
+    // Draw vertical grid lines
+    for (int32_t i = 0; i < linesV; ++i)
         {
-            // Draw vertical grid lines
-            for (int32_t i = 0; i < linesV; i++)
-                {
-                    const Rectangle lineV{ bounds.x + spacing * i / subdivs, bounds.y, ((i % subdivs) == 0) ? thickness : thickness * .25f, bounds.height };
-                    GuiDrawRectangle(lineV, 0, BLANK, ((i % subdivs) == 0) ? GuiFade(color, alpha) : GuiFade(color, alpha));
-                }
+            const auto      space{ spacing * static_cast<float>(i) };
+            const Rectangle lineV{ bounds.x + space, bounds.y, thickness, bounds.height };
+            GuiDrawRectangle(lineV, 0, BLANK, color);
+        }
 
-            // Draw horizontal grid lines
-            for (int32_t i = 0; i < linesH; i++)
-                {
-                    const Rectangle lineH{ bounds.x, bounds.y + spacing * i / subdivs, bounds.width, ((i % subdivs) == 0) ? thickness : thickness * .25f };
-                    GuiDrawRectangle(lineH, 0, BLANK, ((i % subdivs) == 0) ? GuiFade(color, alpha) : GuiFade(color, alpha));
-                }
+    // Draw horizontal grid lines
+    for (int32_t i = 0; i < linesH; ++i)
+        {
+            const auto      space{ spacing * static_cast<float>(i) };
+            const Rectangle lineH{ bounds.x, bounds.y + space, bounds.width, thickness };
+            GuiDrawRectangle(lineH, 0, BLANK, color);
         }
 }
 
@@ -524,7 +522,23 @@ main()
             // Draw grid only if snapping is enabled
             if (app.SnapToGrid)
                 {
-                    DrawGrid(canvasRect, 4, static_cast<int32_t>(app.GridSize * zoomFactor), WHITE);
+                    const auto gridRect{ Rectangle{
+                    static_cast<float>(view.pan.x),
+                    static_cast<float>(view.pan.y),
+                    canvasRect.width,
+                    canvasRect.height,
+                    } };
+
+                    const float gridSize{ app.GridSize * zoomFactor };
+
+                    // Fade the alpha based on zoom level
+                    const auto alpha{ static_cast<uint8_t>(std::clamp((zoomFactor - 0.5f) / 2.f * 255.f, 0.f, 255.f)) };
+                    if (alpha > 0)
+                        {
+                            Color col{ WHITE };
+                            col.a = alpha;
+                            DrawGrid(gridRect, gridSize, col);
+                        }
 
                     // Draw outline
                     DrawRectangleLinesEx(canvasRect, 1.f, BLACK);
