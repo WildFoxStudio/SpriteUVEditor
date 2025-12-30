@@ -95,16 +95,19 @@ NumericBox(Rectangle rect, char* const name, int* value, int min, int max, bool&
     if (GuiButton({ rect.x + rect.width - 30, rect.y, 30, rect.height / 2.f }, "+"))
         {
             *value = std::min(*value + step, max);
+            CP->CommitNewAction();
             return true;
         }
     if (GuiButton({ rect.x + rect.width - 30, rect.y + rect.height / 2.f, 30, rect.height / 2.f }, "-"))
         {
             *value = std::max(*value - step, min);
+            CP->CommitNewAction();
             return true;
         }
     if (GuiValueBox({ rect.x, rect.y, rect.width - 30, rect.height }, name, value, std::min(min, max), std::max(min, max), active))
         {
             active = !active;
+            CP->CommitNewAction();
             return true;
         }
 
@@ -306,17 +309,6 @@ DrawPropertiesIfValidPtr(Rectangle rect, AnimationData* p)
         }
 }
 
-// Selection list
-struct ListSelection
-{
-    int32_t scrollIndex{ -1 };
-    int32_t activeIndex{ -1 };
-    int32_t focusIndex{ -1 };
-    bool    ShowList{};
-};
-
-ListSelection ListState{};
-
 Rectangle panelView   = { 0 };
 Vector2   panelScroll = { 0, 0 };
 
@@ -415,7 +407,7 @@ main()
                         view.pan.y += d.y;
                         view.SafelyClampPan();
                     }
-                else if (!ListState.ShowList) // Mouse wheel zoom (when list not shown)
+                else if (!CP->ListState.ShowList) // Mouse wheel zoom (when list not shown)
                     {
                         const float wheelMove = GetMouseWheelMove();
                         if (wheelMove != 0.0f)
@@ -489,6 +481,27 @@ main()
                                 // std::cout << "Zoom:" << appliedZoom << " prev:" << prevZoomFactor << std::endl;
                             }
                     }
+
+                if (IsKeyDown(KEY_LEFT_CONTROL))
+                    {
+                        // Reset view
+                        if (IsKeyPressed(KEY_ZERO) || IsKeyPressed(KEY_KP_0))
+                            {
+                                ResetViewToDefault();
+                            }
+                        else if (IsKeyPressed(KEY_Z))
+                            {
+                                CP->UndoAction();
+                            }
+                        else if (IsKeyPressed(KEY_Y))
+                            {
+                                CP->RedoAction();
+                            }
+                        else if (IsKeyDown(KEY_S))
+                            {
+                                CP->SaveToFile();
+                            }
+                    }
             }
 #pragma endregion Events
 
@@ -497,9 +510,10 @@ main()
             ClearBackground(GRAY);
 
             // Each frame rebuild the animation names vector
-            CP->RebuildAnimationNamesVectorAndRefreshPropertyPanel(ListState.activeIndex);
+            CP->RebuildAnimationNamesVectorAndRefreshPropertyPanel(CP->ListState.activeIndex);
 
-            const bool hasValidSelectedAnimation{ ListState.activeIndex > -1 && !CP->ImmutableTransientAnimationNames.empty() && ListState.activeIndex < CP->ImmutableTransientAnimationNames.size() };
+            const bool hasValidSelectedAnimation{ CP->ListState.activeIndex > -1 && !CP->ImmutableTransientAnimationNames.empty() &&
+                CP->ListState.activeIndex < CP->ImmutableTransientAnimationNames.size() };
 
             // Use view.pan (screen coords) and GetZoomFactor() (float) to avoid uint32_t -> float conversions and drift.
             const float     zoomFactor = view.GetZoomFactor();
@@ -554,7 +568,7 @@ main()
             // Draw the selected animation
             if (hasValidSelectedAnimation)
                 {
-                    auto& animationVariant = CP->AnimationNameToSpritesheet.at(CP->ImmutableTransientAnimationNames[ListState.activeIndex]);
+                    auto& animationVariant = CP->AnimationNameToSpritesheet.at(CP->ImmutableTransientAnimationNames[CP->ListState.activeIndex]);
                     if (std::holds_alternative<SpritesheetUv>(animationVariant.Data))
                         {
                             auto& spriteSheet = std::get<SpritesheetUv>(animationVariant.Data);
@@ -596,6 +610,8 @@ main()
                                             spriteSheet.Uv.y -= spriteSheet.Uv.h;
                                         }
                                     spriteSheet.Uv.h = std::max(app.SnapToGrid ? g : 1, spriteSheet.Uv.h);
+
+                                    CP->CommitNewAction();
                                 }
 
                             // Get mouse pos in image space
@@ -657,7 +673,7 @@ main()
                 }
 #pragma region GUI
 
-            const char* animationNameOrPlaceholder{ !hasValidSelectedAnimation ? "No animation" : CP->ImmutableTransientAnimationNames[ListState.activeIndex] };
+            const char* animationNameOrPlaceholder{ !hasValidSelectedAnimation ? "No animation" : CP->ImmutableTransientAnimationNames[CP->ListState.activeIndex] };
 
             DrawRectangle(0, 0, GetRenderWidth(), 50, DARKGRAY);
             float TITLE_X_OFFSET{ PAD };
@@ -669,43 +685,47 @@ main()
 
             // Open sprite button
             const Rectangle openButtonRect{ TITLE_X_OFFSET, PAD, GetStringWidth("Open sprite") * 1.f + PAD, 30 };
-            if (GuiButton(openButtonRect, "Open sprite"))
+            if (GuiButton(openButtonRect, "Open sprite") || ActiveModal == EModalType::OPEN_FILE_DIALOG)
                 {
+                    // Always reset active modal when entering file dialog
+                    ActiveModal = EModalType::NONE;
+
                     std::string newImagePath{};
 
                     if (CP->HasUnsavedChanges())
                         {
-                            // ActiveModal = EModalType::CONFIRM_DISCARD_CHANGES;
+                            ActiveModal = EModalType::CONFIRM_DISCARD_CHANGES;
                         }
-
-                    // Since raylib relies on stb_image for image loading right now the formats supported are:
-                    if (app.OpenFileDialog(newImagePath, { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tga", "*.gif" }))
-                        {
-                            std::cout << "Trying to load:" << newImagePath << std::endl;
-                            // Load texture if possible
-                            auto newProject{ std::make_unique<Project>() };
-                            if (newProject->LoadFromFile(newImagePath))
-                                {
-                                    CP = std::move(newProject);
-
-                                    // Reset view
+                    else
+                        // Since raylib relies on stb_image for image loading right now the formats supported are:
+                        if (app.OpenFileDialog(newImagePath, { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tga", "*.gif" }))
+                            {
+                                std::cout << "Trying to load:" << newImagePath << std::endl;
+                                // Load texture if possible
+                                auto newProject{ std::make_unique<Project>() };
+                                if (newProject->LoadFromFile(newImagePath))
                                     {
-                                        // Set the zoom to fit the new image on the max size
-                                        defaultView.fitZoom = view.ZoomFitIntoRect(
-                                        CP->SpriteTexture->width, CP->SpriteTexture->height, { 0, 0, GetRenderWidth() - VIEWPORT_GUI_RIGHT_PANEL_WIDTH, GetRenderHeight() - VIEWPORT_GUI_OCCLUSION_Y });
-                                        defaultView.SetZoomFactor(defaultView.fitZoom);
+                                        CP = std::move(newProject);
 
-                                        ResetViewToDefault();
+                                        // Reset view
+                                        {
+                                            // Set the zoom to fit the new image on the max size
+                                            defaultView.fitZoom = view.ZoomFitIntoRect(CP->SpriteTexture->width,
+                                            CP->SpriteTexture->height,
+                                            { 0, 0, GetRenderWidth() - VIEWPORT_GUI_RIGHT_PANEL_WIDTH, GetRenderHeight() - VIEWPORT_GUI_OCCLUSION_Y });
+                                            defaultView.SetZoomFactor(defaultView.fitZoom);
 
-                                        // Reset selection
-                                        ListState = ListSelection{};
+                                            ResetViewToDefault();
+
+                                            // Reset selection
+                                            CP->ListState = ListSelection{};
+                                        }
                                     }
-                                }
-                            else
-                                {
-                                    app.LastError = "Failed to load image!";
-                                }
-                        }
+                                else
+                                    {
+                                        app.LastError = "Failed to load image!";
+                                    }
+                            }
                 }
             TITLE_X_OFFSET += openButtonRect.width + PAD;
 
@@ -764,29 +784,33 @@ main()
                 const Rectangle animNameRect{ TITLE_X_OFFSET, PAD, nameW, 30 };
                 if (GuiButton(animNameRect, animationNameOrPlaceholder))
                     {
-                        ListState.ShowList = !ListState.ShowList;
+                        CP->ListState.ShowList = !CP->ListState.ShowList;
                     }
                 const auto scrollHeight{ std::clamp(CP->ImmutableTransientAnimationNames.size() * 50.f, 100.f, 500.f) };
                 const auto maxStringW{ std::accumulate(
                 CP->ImmutableTransientAnimationNames.begin(), CP->ImmutableTransientAnimationNames.end(), nameW, [](float acc, const char* name) { return std::max(acc, GetStringWidth(name)); }) };
 
-                if (ListState.ShowList)
+                if (CP->ListState.ShowList)
                     {
-                        const ListSelection prevState{ ListState };
+                        const ListSelection prevState{ CP->ListState };
 
                         const Rectangle panelScrollRect{ TITLE_X_OFFSET - PAD, PAD + 30, maxStringW + PAD * 2, scrollHeight };
                         const Rectangle animListRect{ TITLE_X_OFFSET - PAD, PAD + 30, maxStringW + PAD * 2, scrollHeight };
                         GuiScrollPanel(panelScrollRect, NULL, animListRect, &panelScroll, &panelView);
                         BeginScissorMode(panelView.x, panelView.y, panelView.width, panelView.height);
-                        GuiListViewEx(
-                        animListRect, CP->ImmutableTransientAnimationNames.data(), CP->ImmutableTransientAnimationNames.size(), &ListState.scrollIndex, &ListState.activeIndex, &ListState.focusIndex);
+                        GuiListViewEx(animListRect,
+                        CP->ImmutableTransientAnimationNames.data(),
+                        CP->ImmutableTransientAnimationNames.size(),
+                        &CP->ListState.scrollIndex,
+                        &CP->ListState.activeIndex,
+                        &CP->ListState.focusIndex);
                         // Clamp into range
-                        ListState.activeIndex = std::clamp(ListState.activeIndex, -1, static_cast<int32_t>(CP->ImmutableTransientAnimationNames.size()) - 1);
+                        CP->ListState.activeIndex = std::clamp(CP->ListState.activeIndex, -1, static_cast<int32_t>(CP->ImmutableTransientAnimationNames.size()) - 1);
                         EndScissorMode();
 
-                        if (ListState.activeIndex != prevState.activeIndex)
+                        if (CP->ListState.activeIndex != prevState.activeIndex)
                             {
-                                ListState.ShowList = false;
+                                CP->ListState.ShowList = false;
                             }
                     }
                 TITLE_X_OFFSET += animNameRect.width + PAD;
@@ -821,7 +845,14 @@ main()
             // Draw filename bottom left window
             {
                 DrawRectangle(0, GetRenderHeight() - 16, GetRenderWidth(), 16, DARKGRAY);
-                DrawText(app.ImagePath.c_str(), 10, GetRenderHeight() - 16, 16, WHITE);
+                if (CP->SpritePath.empty())
+                    {
+                        DrawText("UNDO:CTRL+Z  REDO:CTRL+Y  SAVE:CTRL+S CENTER VIEW:CTRL+0", 10, GetRenderHeight() - 16, 16, WHITE);
+                    }
+                else
+                    {
+                        DrawText(CP->SpritePath.c_str(), 10, GetRenderHeight() - 16, 16, WHITE);
+                    }
             }
 
             // Unlock gui
@@ -867,7 +898,9 @@ main()
 
                                 AnimationData animData{ std::move(spriteSheet) };
                                 CP->AnimationNameToSpritesheet.emplace(std::string(NewAnimationName), std::move(animData));
-                                ListState.activeIndex = CP->AnimationNameToSpritesheet.size() - 1;
+                                CP->ListState.activeIndex = CP->AnimationNameToSpritesheet.size() - 1;
+
+                                CP->CommitNewAction();
                             }
 
                         if (GuiButton({ msgRect.x + PAD + 100 + PAD, msgRect.y + msgRect.height - 30 - PAD, 100, 30 }, "Cancel"))
@@ -879,19 +912,43 @@ main()
                     {
                         assert(!CP->ImmutableTransientAnimationNames.empty());
                         std::string tmp{ "Delete " };
-                        tmp += CP->ImmutableTransientAnimationNames[ListState.activeIndex];
+                        tmp += CP->ImmutableTransientAnimationNames[CP->ListState.activeIndex];
 
                         if (GuiMessageBox(msgRect, "Confirm delete", tmp.c_str(), "Cancel;Delete") == 2)
                             {
                                 ActiveModal = EModalType::NONE;
 
-                                CP->AnimationNameToSpritesheet.erase(CP->ImmutableTransientAnimationNames[ListState.activeIndex]);
-                                ListState.activeIndex = -1;
-                                CP->RebuildAnimationNamesVectorAndRefreshPropertyPanel(ListState.activeIndex);
+                                CP->AnimationNameToSpritesheet.erase(CP->ImmutableTransientAnimationNames[CP->ListState.activeIndex]);
+                                CP->ListState.activeIndex = -1;
+                                CP->RebuildAnimationNamesVectorAndRefreshPropertyPanel(CP->ListState.activeIndex);
+
+                                CP->CommitNewAction();
+                            }
+                    }
+                else if (ActiveModal == EModalType::CONFIRM_DISCARD_CHANGES)
+                    {
+                        if (const auto result = GuiMessageBox(msgRect, "Unsaved changes", "You have unsaved changes. Discard them?", "Cancel;Discard;Save"); result >= 0)
+                            {
+                                ActiveModal = EModalType::NONE;
+                                // Proceed with the action that required confirmation
+                                switch (result)
+                                    {
+                                        case 3: // Save
+                                            CP->SaveToFile();
+                                            ActiveModal = EModalType::OPEN_FILE_DIALOG;
+                                            break;
+                                        case 2: // Discard, reset project
+                                            CP          = std::make_unique<Project>();
+                                            ActiveModal = EModalType::OPEN_FILE_DIALOG;
+                                            break;
+
+                                        case 1: // Cancel, just continue
+                                        default: // Cancel
+                                            break;
+                                    }
                             }
                     }
             }
-
 #pragma endregion GUI
 
             EndDrawing();

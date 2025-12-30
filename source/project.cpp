@@ -23,11 +23,30 @@ SOFTWARE.
 */
 #include "project.hpp"
 
-#include <nlohmann/json.hpp>
-
 #include <cassert>
+#include <filesystem>
 #include <fstream>
 #include <optional>
+
+/** Example json structure
+ *
+{
+  "animations" : [
+    {
+      "name":"Idle",
+      "type":"Spritesheet",
+      "x": "0",
+      "y": "0",
+      "width": "32",
+      "height": "32",
+      "frames":"8",
+      "columns":"4",
+      "durationMs":"350"
+      "loop":"true"
+    }
+    ]
+}
+ */
 
 namespace
 {
@@ -68,8 +87,23 @@ Project::SaveToFile() const
     if (SpritePath.empty())
         return false;
 
-    assert(SpriteTexture.has_value()); // Should have a texture loaded
-    assert(false); // Not implemented yet
+    // Write the latest json to file
+    nlohmann::ordered_json j{ SerializeAnimationData() };
+    try
+        {
+            // remove extension from path and add .json
+            const auto    spriteJsonPath{ std::filesystem::path{ SpritePath }.replace_extension(".json").string() };
+            std::ofstream fileStream{ spriteJsonPath };
+            fileStream << j.dump(4);
+            fileStream.close();
+            return true;
+        }
+    catch (const std::exception& e)
+        {
+            // Failed to open the file
+            return false;
+        }
+
     return false;
 }
 
@@ -85,20 +119,26 @@ Project::LoadFromFile(const std::string& filePath)
         {
             SpriteTexture = std::move(loadedTexture.value());
             SpritePath    = filePath;
-            return true;
         }
 
     // Try to load the equivalent json with the same name
-    nlohmann::json j{};
+    nlohmann::ordered_json j{};
     try
         {
-            std::ifstream fileStream{ filePath };
+            const auto    spriteJsonPath{ std::filesystem::path{ SpritePath }.replace_extension(".json").string() };
+            std::ifstream fileStream{ spriteJsonPath };
             fileStream >> j;
+            Deserialize(j);
         }
     catch (const std::exception& e)
         {
             // Failed to open the file, who cares it might not exist yet.
         }
+
+    _actionsStack.clear();
+    _redoStack.clear();
+
+    CommitNewAction();
 
     return SpriteTexture.has_value();
 }
@@ -107,7 +147,153 @@ bool
 Project::HasUnsavedChanges()
 {
     // Compare latest json vs previous json
-    return true;
+    if (_actionsStack.empty())
+        {
+            return false;
+        }
+
+    // Read latest serialized json
+    try
+        {
+            std::ifstream fileStream{};
+            const auto    spriteJsonPath{ std::filesystem::path{ SpritePath }.replace_extension(".json").string() };
+            {
+                fileStream.open(spriteJsonPath);
+                nlohmann::ordered_json latestJson{};
+                fileStream >> latestJson;
+                fileStream.close();
+                // Compare latest json vs previous json
+                return latestJson != _actionsStack.back();
+            }
+        }
+    catch (const std::exception& e)
+        {
+            // Failed to open the file, assume there are changes because file might not exist yet.
+            return !AnimationNameToSpritesheet.empty();
+        }
+
+    return false;
+}
+
+void
+Project::CommitNewAction()
+{
+    auto newState{ SerializeAnimationData() };
+    // Prevent from pushing the same state twice in the stack
+    if (!_actionsStack.empty() && _actionsStack.back() == newState)
+        {
+            return;
+        }
+    _actionsStack.push_back(std::move(newState));
+    // Clear redo stack
+    _redoStack.clear();
+}
+
+void
+Project::UndoAction()
+{
+    if (_actionsStack.empty())
+        {
+            return;
+        }
+
+    auto j{ std::move(_actionsStack.back()) };
+    _actionsStack.pop_back();
+
+    Deserialize(j);
+
+    // Add to redo stack
+    _redoStack.push_back(std::move(j));
+}
+
+void
+Project::RedoAction()
+{
+    if (_redoStack.empty())
+        {
+            return;
+        }
+    auto j{ std::move(_redoStack.back()) };
+    _redoStack.pop_back();
+
+    Deserialize(j);
+
+    // Add to actions stack
+    _actionsStack.push_back(std::move(j));
+}
+
+void
+Project::Deserialize(const nlohmann::ordered_json& j)
+{
+    // Clear everything
+    AnimationNameToSpritesheet.clear();
+    // Deserialize animations
+    for (const auto& animJson : j.at("animations"))
+        {
+            const std::string name{ animJson.at("name").get<std::string>() };
+            const std::string type{ animJson.at("type").get<std::string>() };
+            if (type == "Spritesheet")
+                {
+                    SpritesheetUv spriteSheet{};
+                    spriteSheet.Uv.x                           = animJson.at("x").get<int32_t>();
+                    spriteSheet.Uv.y                           = animJson.at("y").get<int32_t>();
+                    spriteSheet.Uv.w                           = animJson.at("width").get<int32_t>();
+                    spriteSheet.Uv.h                           = animJson.at("height").get<int32_t>();
+                    spriteSheet.Property_NumOfFrames.Value     = animJson.at("frames").get<int32_t>();
+                    spriteSheet.Property_Columns.Value         = animJson.at("columns").get<int32_t>();
+                    spriteSheet.Property_FrameDurationMs.Value = animJson.at("durationMs").get<int32_t>();
+                    spriteSheet.Looping                        = animJson.at("looping").get<bool>();
+
+                    AnimationData animData{ std::move(spriteSheet) };
+
+                    AnimationNameToSpritesheet.emplace(name, std::move(animData));
+                }
+            else if (type == "Keyframe")
+                {
+                    assert(false && "KEYFRAME not Supported yet!");
+                }
+        }
+    // Editor only data
+    const int32_t selectedAnimationIndex{ j.at("selectedAnimationIndex").get<int32_t>() };
+    assert(selectedAnimationIndex >= -1 && selectedAnimationIndex < static_cast<int32_t>(AnimationNameToSpritesheet.size()));
+    ListState.activeIndex = selectedAnimationIndex;
+    RebuildAnimationNamesVectorAndRefreshPropertyPanel(ListState.activeIndex);
+}
+
+nlohmann::ordered_json
+Project::SerializeAnimationData() const
+{
+    nlohmann::ordered_json j{};
+    // Serialize animations
+    j["animations"] = nlohmann::ordered_json::array();
+    for (const auto& [name, animationData] : AnimationNameToSpritesheet)
+        {
+            nlohmann::ordered_json animJson{};
+            animJson["name"] = name;
+            if (std::holds_alternative<SpritesheetUv>(animationData.Data))
+                {
+                    const auto& spriteSheet{ std::get<SpritesheetUv>(animationData.Data) };
+                    animJson["type"]       = "Spritesheet";
+                    animJson["x"]          = spriteSheet.Uv.x;
+                    animJson["y"]          = spriteSheet.Uv.y;
+                    animJson["width"]      = spriteSheet.Uv.w;
+                    animJson["height"]     = spriteSheet.Uv.h;
+                    animJson["frames"]     = spriteSheet.Property_NumOfFrames.Value;
+                    animJson["columns"]    = spriteSheet.Property_Columns.Value;
+                    animJson["durationMs"] = spriteSheet.Property_FrameDurationMs.Value;
+                    animJson["looping"]    = spriteSheet.Looping;
+                }
+            else if (std::holds_alternative<KeyframeUv>(animationData.Data))
+                {
+                    assert(false && "KEYFRAME not Supported yet!");
+                }
+            j["animations"].push_back(animJson);
+        }
+
+    // Editor only data
+    j["selectedAnimationIndex"] = ListState.activeIndex;
+
+    return j;
 }
 
 Project::Project(Texture2D sprite, const std::string& filePath) : SpritePath{ filePath }, SpriteTexture{ sprite }

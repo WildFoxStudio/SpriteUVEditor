@@ -26,9 +26,12 @@ SOFTWARE.
 
 #include "raylib.h"
 
+#include <nlohmann/json.hpp> // Would be better to include it only in cpp, but needed for some definitions here.
+
 #include "geometry.hpp"
 
 #include <cstdint>
+#include <list>
 #include <map>
 #include <optional>
 #include <string>
@@ -86,6 +89,15 @@ struct AnimationData
     AnimationVariant_T Data{ SpritesheetUv{} };
 };
 
+// Selection list
+struct ListSelection
+{
+    int32_t scrollIndex{ -1 };
+    int32_t activeIndex{ -1 };
+    int32_t focusIndex{ -1 };
+    bool    ShowList{};
+};
+
 class Project
 {
   public:
@@ -113,6 +125,23 @@ class Project
      * \brief The currently selected animation for property editing.
      */
     AnimationData* PropertyPanel{};
+    /**
+     * \brief The current state of the animation selection list.
+     */
+    ListSelection ListState{};
 
-    bool HasUnsavedChanges();
+    nlohmann::ordered_json SerializeAnimationData() const;
+    bool                   HasUnsavedChanges();
+
+#pragma region UndoRedo
+    void CommitNewAction();
+    void UndoAction();
+    void RedoAction();
+#pragma endregion
+  private:
+    constexpr static size_t           MAX_UNDO_ACTIONS{ 100 };
+    std::list<nlohmann::ordered_json> _actionsStack{};
+    std::list<nlohmann::ordered_json> _redoStack{};
+
+    void Deserialize(const nlohmann::ordered_json& j);
 };
