@@ -379,6 +379,7 @@ main()
         defaultView.fitZoom =
         View::ZoomFitIntoRect(DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT, { 0, 0, GetRenderWidth() - VIEWPORT_GUI_RIGHT_PANEL_WIDTH, GetRenderHeight() - VIEWPORT_GUI_OCCLUSION_Y });
         defaultView.SetZoomFactor(defaultView.fitZoom);
+        defaultView.prevZoom = defaultView.zoom;
         assert(defaultView.fitZoom > 0.f);
     }
 
@@ -474,12 +475,11 @@ main()
                                     view.SafelyClampPan();
                                 }
 
-                                // Keep prevZoom consistent for subsequent mouse/drag calculations
-                                view.prevZoom = view.zoom;
-
                                 // Optional debug:
                                 // std::cout << "Zoom:" << appliedZoom << " prev:" << prevZoomFactor << std::endl;
                             }
+                        // Keep prevZoom consistent for subsequent mouse/drag calculations
+                        view.prevZoom = view.zoom;
                     }
 
                 if (IsKeyDown(KEY_LEFT_CONTROL))
