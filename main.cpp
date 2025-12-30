@@ -716,9 +716,6 @@ main()
                                             defaultView.SetZoomFactor(defaultView.fitZoom);
 
                                             ResetViewToDefault();
-
-                                            // Reset selection
-                                            CP->ListState = ListSelection{};
                                         }
                                     }
                                 else

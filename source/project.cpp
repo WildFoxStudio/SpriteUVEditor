@@ -257,6 +257,8 @@ Project::Deserialize(const nlohmann::ordered_json& j)
     const int32_t selectedAnimationIndex{ j.at("selectedAnimationIndex").get<int32_t>() };
     assert(selectedAnimationIndex >= -1 && selectedAnimationIndex < static_cast<int32_t>(AnimationNameToSpritesheet.size()));
     ListState.activeIndex = selectedAnimationIndex;
+    ListState.scrollIndex = selectedAnimationIndex;
+    ListState.focusIndex  = selectedAnimationIndex;
     RebuildAnimationNamesVectorAndRefreshPropertyPanel(ListState.activeIndex);
 }
 
