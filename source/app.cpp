@@ -26,6 +26,7 @@ SOFTWARE.
 
 #include "tinyfiledialogs.h"
 
+#include <filesystem>
 #include <iostream>
 
 App::App(int32_t width, int32_t height, const char* title)
@@ -34,8 +35,11 @@ App::App(int32_t width, int32_t height, const char* title)
     InitWindow(1600, 900, title);
 
     SetTargetFPS(GetMonitorRefreshRate(0));
-
-    Image icon = LoadImage("icons/uvEdit.png");
+    // Combine the current path with the icons folder
+    const std::filesystem::path currentPath{ std::filesystem::current_path() };
+    const auto                  iconsFolderPath{ currentPath / "icons" };
+    const auto                  iconPath{ iconsFolderPath / "uvEdit.png" };
+    Image                       icon = LoadImage(iconPath.string().c_str());
     if (icon.data)
         {
             SetWindowIcon(icon);
@@ -46,7 +50,9 @@ App::App(int32_t width, int32_t height, const char* title)
             std::cout << "Failed to load window icon!" << std::endl;
         }
 
-    fontRoboto = LoadFontEx("fonts/Roboto-Bold.ttf", 16, nullptr, 250);
+    const auto fontsFolderPath{ currentPath / "fonts" };
+    const auto fontPath{ fontsFolderPath / "Roboto-Bold.ttf" };
+    fontRoboto = LoadFontEx(fontPath.string().c_str(), 16, nullptr, 250);
     if (!fontRoboto.texture.id)
         {
             std::cout << "Failed to load Roboto font, falling back to default font." << std::endl;

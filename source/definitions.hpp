@@ -40,6 +40,8 @@ enum class EModalType
     NONE,
     CREATE_ANIMATION,
     CONFIRM_DELETE,
+    CONFIRM_DISCARD_CHANGES,
+    OPEN_FILE_DIALOG, // Used to trigger file dialog from main loop when previous modal chooses to.
 };
 
 enum EControlIndex : int32_t

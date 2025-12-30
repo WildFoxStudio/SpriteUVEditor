@@ -39,7 +39,6 @@ class App final
     bool                       GridSizeInputActive{}; // Gui box active state
     bool                       DrawGrid{ true };
     bool                       SnapToGrid{ true };
-    std::string                ImagePath{};
     std::optional<std::string> LastError{};
     Texture2D                  CheckerBoardTexture{};
 
