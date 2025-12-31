@@ -3,7 +3,7 @@ name: Multi-platform Release
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*' # Triggers when you push a tag starting with v (e.g., v1.0.0)
 
 jobs:
   build:
@@ -27,27 +27,44 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 1. LINUX FIX: Install graphics and audio development dependencies for Raylib
+      - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libx11-dev libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libxkbcommon-dev
 
+      # 2. CONFIGURATION: Fix for MSVC Static Runtime and MacOS CMake compatibility
       - name: Configure CMake
-        # Usiamo il flag per il runtime statico anche qui per sicurezza
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" 
+        run: >
+          cmake -B build 
+          -DCMAKE_BUILD_TYPE=Release 
+          -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" 
+          -DCMAKE_POLICY_DEFAULT_CMP0091=NEW 
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
+      # 3. BUILD: Compile the project in Release mode
       - name: Build project
         run: cmake --build build --config Release
 
+      # 4. PREPARATION: Collect executable and content folder into a distribution directory
       - name: Prepare Release Folder
         shell: bash
         run: |
           mkdir -p dist
-          # Copia l'eseguibile basandosi sul percorso definito nella matrix
-          cp ${{ matrix.executable_path }} dist/
-          # Copia la cartella content (assicurati che sia nella root del repo)
+          # Copy the executable based on the matrix path
+          if [ -f "${{ matrix.executable_path }}" ]; then
+            cp ${{ matrix.executable_path }} dist/
+          else
+            echo "Error: Executable not found at ${{ matrix.executable_path }}"
+            exit 1
+          fi
+          
+          # Copy the content folder if it exists
           if [ -d "content" ]; then
             cp -r content dist/
+          else
+            echo "Warning: Content folder not found"
           fi
 
       - name: Upload Artifacts
@@ -60,24 +77,27 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Necessario per creare la release e caricare file
+      contents: write # Required to create the release and upload assets
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
+      # 5. PACKAGING: Zip each artifact directory for the final release
       - name: Zip Artifacts for Release
         run: |
           cd artifacts
           for dir in */; do
+            # Remove trailing slash for the zip filename
             zip -r "${dir%/}.zip" "$dir"
           done
 
+      # 6. PUBLISH: Create the GitHub Release and upload the .zip files
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: artifacts/*.zip
-          body: "Release automatica multi-piattaforma. Include eseguibile e cartella content."
+          body: "Automated multi-platform release. Includes executable and content assets."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
