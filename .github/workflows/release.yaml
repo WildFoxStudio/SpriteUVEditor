@@ -29,7 +29,7 @@ jobs:
 
       - name: Configure CMake
         # Usiamo il flag per il runtime statico anche qui per sicurezza
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded"
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" 
 
       - name: Build project
         run: cmake --build build --config Release
