@@ -3,7 +3,7 @@ name: Multi-platform Release
 on:
   push:
     tags:
-      - 'v*' # Triggers when you push a tag starting with v (e.g., v1.0.0)
+      - 'v*'
 
 jobs:
   build:
@@ -27,31 +27,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 1. LINUX FIX: Install graphics and audio dependencies
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libx11-dev libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libxkbcommon-dev
 
-      # 2. CONFIGURATION: Separate steps with Forced Language Initialization
+      # Windows: standard with MSVC runtime fix
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_LANGUAGES="C;CXX"
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" -DCMAKE_POLICY_DEFAULT_CMP0091=NEW
 
+      # Linux: Explicitly point to gcc/g++ to satisfy Raylib
       - name: Configure CMake (Linux)
         if: runner.os == 'Linux'
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_LANGUAGES="C;CXX"
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
 
+      # macOS: Explicitly point to clang and bypass policy check
       - name: Configure CMake (macOS)
         if: runner.os == 'macOS'
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_LANGUAGES="C;CXX"
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-      # 3. BUILD
       - name: Build project
         run: cmake --build build --config Release
 
-      # 4. PREPARATION: Collect executable and content folder
       - name: Prepare Release Folder
         shell: bash
         run: |
@@ -62,7 +61,6 @@ jobs:
             echo "Error: Executable not found at ${{ matrix.executable_path }}"
             exit 1
           fi
-          
           if [ -d "content" ]; then
             cp -r content dist/
           fi
@@ -83,18 +81,16 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-
       - name: Zip Artifacts for Release
         run: |
           cd artifacts
           for dir in */; do
             zip -r "${dir%/}.zip" "$dir"
           done
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: artifacts/*.zip
-          body: "Automated multi-platform release. Includes executable and content assets."
+          body: "Automated multi-platform release."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
