@@ -47,9 +47,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(json)
 
 # -------------------------------------------------
-# 4. Your executable
-# -------------------------------------------------
-# -------------------------------------------------
 # 4. tinyfiledialogs - using FetchContent
 # -------------------------------------------------
 FetchContent_Declare(
