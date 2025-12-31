@@ -79,7 +79,7 @@ set_target_properties(tinyfiledialogs PROPERTIES
     )
 
 # Ensure tinyfiledialogs uses the same runtime
-if(WIN32)
+if(MSVC)
 target_compile_options(tinyfiledialogs PRIVATE 
             $<$<CONFIG:Release>:/MT> 
             $<$<CONFIG:Debug>:/MTd>
