@@ -3,7 +3,7 @@ name: Multi-platform Release
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*' # Triggers when you push a tag starting with v (e.g., v1.0.0)
 
 jobs:
   build:
@@ -27,25 +27,31 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Install Linux dependencies
+      # 1. LINUX FIX: Install graphics and audio dependencies
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libx11-dev libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libxkbcommon-dev
 
-      # Use separate configuration commands for Windows vs Unix to avoid flag pollution
+      # 2. CONFIGURATION: Separate steps for each OS to avoid flag pollution
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" -DCMAKE_POLICY_DEFAULT_CMP0091=NEW
 
-      - name: Configure CMake (Unix)
-        if: runner.os != 'Windows'
+      - name: Configure CMake (Linux)
+        if: runner.os == 'Linux'
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
+      - name: Configure CMake (macOS)
+        if: runner.os == 'macOS'
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      # 3. BUILD
       - name: Build project
         run: cmake --build build --config Release
 
+      # 4. PREPARATION: Collect executable and content folder
       - name: Prepare Release Folder
         shell: bash
         run: |
