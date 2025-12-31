@@ -163,7 +163,7 @@ Project::HasUnsavedChanges()
                 fileStream >> latestJson;
                 fileStream.close();
                 // Compare latest json vs previous json
-                return latestJson != _actionsStack.back();
+                return latestJson != SerializeAnimationData();
             }
         }
     catch (const std::exception& e)
@@ -187,6 +187,12 @@ Project::CommitNewAction()
     _actionsStack.push_back(std::move(newState));
     // Clear redo stack
     _redoStack.clear();
+
+    // Enforce max undo actions by dropping the oldest states
+    while (_actionsStack.size() > MAX_UNDO_ACTIONS)
+        {
+            _actionsStack.pop_front();
+        }
 }
 
 void
@@ -197,13 +203,27 @@ Project::UndoAction()
             return;
         }
 
-    auto j{ std::move(_actionsStack.back()) };
+    // Remove current state and store it in redo stack
+    auto current{ std::move(_actionsStack.back()) };
     _actionsStack.pop_back();
 
-    Deserialize(j);
+    if (!_actionsStack.empty())
+        {
+            // Restore the previous state (now the last in the actions stack)
+            const auto previous = _actionsStack.back();
+            Deserialize(previous);
+        }
+    else
+        {
+            // No previous state exists -> restore an empty/default state
+            nlohmann::ordered_json emptyState{};
+            emptyState["animations"]             = nlohmann::ordered_json::array();
+            emptyState["selectedAnimationIndex"] = -1;
+            Deserialize(emptyState);
+        }
 
-    // Add to redo stack
-    _redoStack.push_back(std::move(j));
+    // Add the removed current state to redo stack
+    _redoStack.push_back(std::move(current));
 }
 
 void
@@ -218,8 +238,12 @@ Project::RedoAction()
 
     Deserialize(j);
 
-    // Add to actions stack
+    // Add to actions stack and enforce max size
     _actionsStack.push_back(std::move(j));
+    while (_actionsStack.size() > MAX_UNDO_ACTIONS)
+        {
+            _actionsStack.pop_front();
+        }
 }
 
 void
