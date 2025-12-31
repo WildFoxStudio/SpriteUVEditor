@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 include(FetchContent)
 
 # -------------------------------------------------
@@ -72,6 +74,18 @@ if(NOT TARGET tinyfiledialogs)
     endif()
 endif()
 
+set_target_properties(tinyfiledialogs PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    )
+
+# Ensure tinyfiledialogs uses the same runtime
+if(WIN32)
+target_compile_options(tinyfiledialogs PRIVATE 
+            $<$<CONFIG:Release>:/MT> 
+            $<$<CONFIG:Debug>:/MTd>
+        )
+endif()
+
 # -------------------------------------------------
 # 5. Your executable
 # -------------------------------------------------
@@ -97,10 +111,13 @@ target_include_directories(sprite_uv_editor PRIVATE "source")
 # Optional: define RAYGUI_IMPLEMENTATION in one CPP file
 target_compile_definitions(sprite_uv_editor PRIVATE RAYGUI_IMPLEMENTATION)
 
+# Use the same runtime
 # Set the debug working directory to the content folder
 set_target_properties(sprite_uv_editor PROPERTIES
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/content"
 )
+
 
 # Copy resources to build directory if needed
 # add_custom_command(TARGET sprite_uv_editor POST_BUILD
