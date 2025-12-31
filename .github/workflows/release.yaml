@@ -27,6 +27,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libxkbcommon-dev
+
       - name: Configure CMake
         # Usiamo il flag per il runtime statico anche qui per sicurezza
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded" 
