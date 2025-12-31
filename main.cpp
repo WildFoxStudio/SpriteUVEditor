@@ -701,6 +701,7 @@ main()
                     GuiLock();
                 }
 
+            const bool unsavedChanges{ CP->HasUnsavedChanges() };
             // Open sprite button
             const Rectangle openButtonRect{ TITLE_X_OFFSET, PAD, GetStringWidth("Open sprite") * 1.f + PAD, 30 };
             if (GuiButton(openButtonRect, "Open sprite") || ActiveModal == EModalType::OPEN_FILE_DIALOG)
@@ -710,7 +711,7 @@ main()
 
                     std::string newImagePath{};
 
-                    if (CP->HasUnsavedChanges())
+                    if (unsavedChanges)
                         {
                             ActiveModal = EModalType::CONFIRM_DISCARD_CHANGES;
                         }
@@ -743,6 +744,20 @@ main()
                             }
                 }
             TITLE_X_OFFSET += openButtonRect.width + PAD;
+
+            // Save button
+            if (!unsavedChanges || CP->SpritePath.empty())
+                {
+                    GuiSetState(STATE_DISABLED);
+                }
+
+            const Rectangle saveButtonRect{ TITLE_X_OFFSET, PAD, GetStringWidth("Save") * 1.f + PAD, 30 };
+            if (GuiButton(saveButtonRect, "Save"))
+                {
+                    CP->SaveToFile();
+                }
+            GuiSetState(STATE_NORMAL);
+            TITLE_X_OFFSET += saveButtonRect.width + PAD;
 
             // Draw grid size
             {
