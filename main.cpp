@@ -148,39 +148,57 @@ DrawSpritesheetUvProperties(Rectangle rect, SpritesheetUv& p)
 {
     rect.height = 30;
 
+    // Etichette mutabili per evitare il problema di conversione da const char* a char*
+    static char lblX[]             = "X: ";
+    static char lblY[]             = "Y: ";
+    static char lblWidth[]         = "Width: ";
+    static char lblHeight[]        = "Height: ";
+    static char lblFrames[]        = "Frames: ";
+    static char lblColumns[]       = "Columns: ";
+    static char lblFrameDuration[] = "Frame duration ms: ";
+
     // Draw UV Rect
     {
-        p.Property_Rect[0].Value = p.Uv.x;
-        (void)(NumericBox(rect, "X: ", &p.Property_Rect[0].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[0].ActiveBox));
-        p.Uv.x = static_cast<float>(p.Property_Rect[0].Value);
+        // Esplicito cast verso int per popolare i Property (evita conversioni implicite)
+        p.Property_Rect[0].Value = static_cast<int>(p.Uv.x);
+        (void)(NumericBox(rect, lblX, &p.Property_Rect[0].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[0].ActiveBox));
+        // Aggiorno Uv usando il tipo del campo Uv (decltype evita warning se il tipo cambia)
+        p.Uv.x = static_cast<decltype(p.Uv.x)>(p.Property_Rect[0].Value);
+
         rect.y += 30 + PAD;
-        p.Property_Rect[1].Value = p.Uv.y;
-        (void)(NumericBox(rect, "Y: ", &p.Property_Rect[1].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[1].ActiveBox));
-        p.Uv.y = static_cast<float>(p.Property_Rect[1].Value);
+
+        p.Property_Rect[1].Value = static_cast<int>(p.Uv.y);
+        (void)(NumericBox(rect, lblY, &p.Property_Rect[1].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[1].ActiveBox));
+        p.Uv.y = static_cast<decltype(p.Uv.y)>(p.Property_Rect[1].Value);
+
         rect.y += 30 + PAD;
-        p.Property_Rect[2].Value = p.Uv.w;
-        (void)(NumericBox(rect, "Width: ", &p.Property_Rect[2].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[2].ActiveBox));
-        p.Uv.w = static_cast<float>(p.Property_Rect[2].Value);
+
+        p.Property_Rect[2].Value = static_cast<int>(p.Uv.w);
+        (void)(NumericBox(rect, lblWidth, &p.Property_Rect[2].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[2].ActiveBox));
+        p.Uv.w = static_cast<decltype(p.Uv.w)>(p.Property_Rect[2].Value);
+
         rect.y += 30 + PAD;
-        p.Property_Rect[3].Value = p.Uv.h;
-        (void)(NumericBox(rect, "Height: ", &p.Property_Rect[3].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[3].ActiveBox));
-        p.Uv.h = static_cast<float>(p.Property_Rect[3].Value);
+
+        p.Property_Rect[3].Value = static_cast<int>(p.Uv.h);
+        (void)(NumericBox(rect, lblHeight, &p.Property_Rect[3].Value, -INT32_MAX, INT32_MAX, p.Property_Rect[3].ActiveBox));
+        p.Uv.h = static_cast<decltype(p.Uv.h)>(p.Property_Rect[3].Value);
+
         rect.y += 30 + PAD;
     }
 
     // Num of frames
-    (void)(NumericBox(rect, "Frames: ", &p.Property_NumOfFrames.Value, 1, 8196, p.Property_NumOfFrames.ActiveBox));
+    (void)(NumericBox(rect, lblFrames, &p.Property_NumOfFrames.Value, 1, 8196, p.Property_NumOfFrames.ActiveBox));
 
     rect.y += 30 + PAD;
 
     // Wrap around
-    (void)(NumericBox(rect, "Columns: ", &p.Property_Columns.Value, 1, 8196, p.Property_Columns.ActiveBox));
+    (void)(NumericBox(rect, lblColumns, &p.Property_Columns.Value, 1, 8196, p.Property_Columns.ActiveBox));
     // Clamp to at least 1 column
     p.Property_Columns.Value = std::max(p.Property_Columns.Value, 1);
     rect.y += 30 + PAD;
 
     // Frame duration
-    (void)(NumericBox(rect, "Frame duration ms: ", &p.Property_FrameDurationMs.Value, 0, INT32_MAX, p.Property_FrameDurationMs.ActiveBox));
+    (void)(NumericBox(rect, lblFrameDuration, &p.Property_FrameDurationMs.Value, 0, INT32_MAX, p.Property_FrameDurationMs.ActiveBox));
     rect.y += 30 + PAD;
 
     if (CP->SpriteTexture.has_value())
@@ -517,7 +535,7 @@ main()
 
             // Use view.pan (screen coords) and GetZoomFactor() (float) to avoid uint32_t -> float conversions and drift.
             const float     zoomFactor = view.GetZoomFactor();
-            const Rectangle canvasRect{ view.pan.x, view.pan.y, CANVAS_WIDTH * zoomFactor, CANVAS_HEIGHT * zoomFactor };
+            const Rectangle canvasRect{ static_cast<float>(view.pan.x), static_cast<float>(view.pan.y), CANVAS_WIDTH * zoomFactor, CANVAS_HEIGHT * zoomFactor };
 
             // Draw checkered background
             if (app.CheckerBoardTexture.id)
@@ -729,7 +747,8 @@ main()
             // Draw grid size
             {
                 const Rectangle rect{ TITLE_X_OFFSET, PAD, GetStringWidth("Grid size") + 80.f, 30 };
-                (void)(NumericBox(rect, "Grid size", &app.GridSize, 0, 8196, app.GridSizeInputActive));
+                static char     lblGridSize[] = "Grid size";
+                (void)(NumericBox(rect, lblGridSize, &app.GridSize, 0, 8196, app.GridSizeInputActive));
 
                 TITLE_X_OFFSET += rect.width + PAD;
 

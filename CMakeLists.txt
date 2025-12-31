@@ -115,6 +115,13 @@ set_target_properties(sprite_uv_editor PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/content"
 )
 
+if (MSVC)
+    # MSVC
+    target_compile_options(sprite_uv_editor PRIVATE /W4 /permissive-)
+else()
+    # (Linux) and Clang (Mac)
+    target_compile_options(sprite_uv_editor PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
 # Copy resources to build directory if needed
 # add_custom_command(TARGET sprite_uv_editor POST_BUILD
