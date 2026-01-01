@@ -144,6 +144,29 @@ Project::LoadFromFile(const std::string& filePath)
 }
 
 bool
+Project::ExportHeaderFile(const std::string& headerFilePath) const
+{
+    // Export all animations names as `const char Animation0[] = {"Animation0"};`
+    try
+        {
+            std::ofstream fileStream{ headerFilePath };
+            fileStream << "#pragma once\n\n";
+            for (const auto& [name, animationData] : AnimationNameToSpritesheet)
+                {
+                    fileStream << "const char " << name << "[] = {\"" << name << "\"};\n";
+                }
+            fileStream.close();
+            return true;
+        }
+    catch (const std::exception& e)
+        {
+            // Failed to open the file
+            return false;
+        }
+    return false;
+}
+
+bool
 Project::HasUnsavedChanges()
 {
     // Compare latest json vs previous json
