@@ -756,8 +756,24 @@ main()
                 {
                     CP->SaveToFile();
                 }
-            GuiSetState(STATE_NORMAL);
             TITLE_X_OFFSET += saveButtonRect.width + PAD;
+            GuiSetState(STATE_NORMAL);
+
+            if (CP->SpritePath.empty())
+                {
+                    GuiSetState(STATE_DISABLED);
+                }
+            const Rectangle exportHeaderRect{ TITLE_X_OFFSET, PAD, GetStringWidth("Export .h") * 1.f + PAD, 30 };
+            if (GuiButton(exportHeaderRect, "Export .h"))
+                {
+                    std::string exportPath{};
+                    if (app.OpenSaveFileDialog(exportPath, { "*.h" }))
+                        {
+                            CP->ExportHeaderFile(exportPath);
+                        }
+                }
+            TITLE_X_OFFSET += exportHeaderRect.width + PAD;
+            GuiSetState(STATE_NORMAL);
 
             // Draw grid size
             {

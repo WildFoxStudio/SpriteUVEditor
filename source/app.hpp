@@ -49,6 +49,7 @@ class App final
     Font GetFont() const { return fontRoboto; }
 
     bool OpenFileDialog(std::string& filePath, const std::vector<std::string>& extension) const;
+    bool OpenSaveFileDialog(std::string& filePath, const std::vector<std::string>& extension) const;
 
   private:
     Font fontRoboto{};

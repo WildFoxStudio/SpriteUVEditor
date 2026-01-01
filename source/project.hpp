@@ -106,6 +106,8 @@ class Project
     bool SaveToFile() const;
     bool LoadFromFile(const std::string& filePath);
 
+    bool ExportHeaderFile(const std::string& headerFilePath) const;
+
     std::vector<const char*> ImmutableTransientAnimationNames{};
     void                     RebuildAnimationNamesVectorAndRefreshPropertyPanel(int32_t activeIndex)
     {

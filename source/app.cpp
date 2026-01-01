@@ -104,3 +104,19 @@ App::OpenFileDialog(std::string& filePath, const std::vector<std::string>& exten
 
     return false;
 }
+
+bool
+App::OpenSaveFileDialog(std::string& filePath, const std::vector<std::string>& extension) const
+{
+    std::vector<const char*> extensions;
+    extensions.reserve(extension.size());
+    std::transform(extension.begin(), extension.end(), std::back_inserter(extensions), [](const std::string& str) { return str.c_str(); });
+    const char* result{ tinyfd_saveFileDialog("Save file as", NULL, extension.size(), extensions.data(), nullptr) };
+    if (result)
+        {
+            filePath = std::string(result);
+            // Tinyfiledialogs not changing the working path to the selected one thus some relative files can not be loaded
+            return true;
+        }
+    return false;
+}
